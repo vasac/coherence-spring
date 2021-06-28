@@ -12,6 +12,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
@@ -21,8 +22,8 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import javax.annotation.Nullable;
 import javax.annotation.PreDestroy;
+import javax.inject.Named;
 
 import com.oracle.coherence.spring.annotation.ExtractorBinding;
 import com.oracle.coherence.spring.annotation.FilterBinding;
@@ -74,13 +75,11 @@ public class CoherenceTopicListenerSubscribers implements ApplicationContextAwar
 	public CoherenceTopicListenerSubscribers(FilterService filterService,
 											ExtractorService extractorService,
 											CoherenceTopicListenerCandidates candidates,
-											@Nullable ExecutorService executorService) {
+											@Named("consumers") Optional<ExecutorService> executorService) {
 		this.filterService = filterService;
 		this.extractorService = extractorService;
 		this.candidates = candidates;
-		this.scheduler = (executorService != null)
-				? Schedulers.fromExecutor(executorService)
-				: Schedulers.parallel();
+		this.scheduler = executorService.map(Schedulers::fromExecutor).orElseGet(Schedulers::parallel);
 	}
 
 	public boolean isSubscribed() {

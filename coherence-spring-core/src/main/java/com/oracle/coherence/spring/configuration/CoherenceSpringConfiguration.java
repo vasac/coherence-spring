@@ -13,7 +13,6 @@ import com.oracle.coherence.spring.annotation.Name;
 import com.oracle.coherence.spring.event.CoherenceEventListenerCandidates;
 import com.oracle.coherence.spring.event.CoherenceEventListenerMethodProcessor;
 import com.oracle.coherence.spring.event.mapevent.MapListenerRegistrationBean;
-import com.oracle.coherence.spring.messaging.CoherencePublisherPostProcessor;
 import com.oracle.coherence.spring.messaging.CoherenceTopicListenerPostProcessor;
 import com.oracle.coherence.spring.messaging.CoherenceTopicListenerSubscribers;
 import com.tangosol.net.CacheFactory;
@@ -218,11 +217,6 @@ public class CoherenceSpringConfiguration {
 	@Autowired
 	public void setCoherenceEventListenerCandidates(CoherenceEventListenerCandidates coherenceEventListenerCandidates) {
 		this.coherenceEventListenerCandidates = coherenceEventListenerCandidates;
-	}
-
-	@Bean
-	public static CoherencePublisherPostProcessor coherencePublisherPostProcessor() {
-		return new CoherencePublisherPostProcessor();
 	}
 
 	@Bean

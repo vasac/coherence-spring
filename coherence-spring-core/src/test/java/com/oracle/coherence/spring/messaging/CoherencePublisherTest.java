@@ -13,6 +13,7 @@ import java.util.concurrent.TimeUnit;
 
 import javax.inject.Singleton;
 
+import com.oracle.coherence.spring.annotation.CoherenceIntegrationComponentScan;
 import com.oracle.coherence.spring.annotation.CoherencePublisher;
 import com.oracle.coherence.spring.annotation.Topic;
 import com.oracle.coherence.spring.configuration.annotation.EnableCoherence;
@@ -249,14 +250,16 @@ public class CoherencePublisherTest {
 	@Configuration
 	@EnableCoherence
 	@EnableCaching
+	@CoherenceIntegrationComponentScan("com.oracle.coherence")
 	static class Config {
 	}
 
 	@Singleton
-	@CoherencePublisher
+	@CoherencePublisher(maxBlock = "PT15M", proxyDefaultMethods = true)
 	interface PublishersOne {
 		@Topic("One")
-		void send(String message);
+		default void send(String message) {
+		}
 
 		void sendTo(@Topic("One") String topic, String message);
 
