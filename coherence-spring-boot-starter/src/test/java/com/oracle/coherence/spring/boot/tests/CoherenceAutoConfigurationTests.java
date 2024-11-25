@@ -1,35 +1,47 @@
 /*
- * Copyright (c) 2013, 2021, Oracle and/or its affiliates.
+ * Copyright (c) 2013, 2024, Oracle and/or its affiliates.
  *
  * Licensed under the Universal Permissive License v 1.0 as shown at
  * https://oss.oracle.com/licenses/upl.
  */
 package com.oracle.coherence.spring.boot.tests;
 
+import java.time.Duration;
+import java.util.Map;
+
 import com.oracle.coherence.spring.CoherenceServer;
 import com.oracle.coherence.spring.annotation.CoherencePublisher;
 import com.oracle.coherence.spring.boot.autoconfigure.CoherenceAutoConfiguration;
 import com.oracle.coherence.spring.boot.autoconfigure.CoherenceProperties;
 import com.oracle.coherence.spring.cache.CoherenceCacheManager;
+import com.oracle.coherence.spring.configuration.CoherenceConfigurer;
+import com.oracle.coherence.spring.configuration.DefaultCoherenceConfigurer;
 import com.oracle.coherence.spring.configuration.session.SessionConfigurationBean;
 import com.oracle.coherence.spring.configuration.support.SpringSystemPropertyResolver;
 import com.tangosol.coherence.config.SystemPropertyResolver;
 import com.tangosol.net.Coherence;
+import com.tangosol.net.NamedCache;
 import com.tangosol.net.Session;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.autoconfigure.cache.CacheAutoConfiguration;
+import org.springframework.boot.convert.ApplicationConversionService;
 import org.springframework.boot.test.context.ConfigDataApplicationContextInitializer;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.EnableCaching;
+import org.springframework.cache.support.SimpleCacheManager;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.convert.ConversionService;
+import org.springframework.core.convert.support.ConfigurableConversionService;
 import org.springframework.core.env.Environment;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.fail;
 
 /**
  *
@@ -41,10 +53,24 @@ public class CoherenceAutoConfigurationTests {
 	private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()
 			.withConfiguration(AutoConfigurations.of(CoherenceAutoConfiguration.class))
 			.withConfiguration(AutoConfigurations.of(CacheAutoConfiguration.class))
-			.withInitializer(new ConfigDataApplicationContextInitializer());
+			.withInitializer(new ConfigDataApplicationContextInitializer())
+			.withSystemProperties(
+					"coherence.localhost=127.0.0.1",
+					"coherence.ttl=0",
+					"java.net.preferIPv4Stack=true",
+					"coherence.wka=127.0.0.1",
+					"coherence.cluster=CoherenceAutoConfigurationTestsCluster"
+					)
+			.withInitializer(
+					(context) -> {
+						ConfigurableConversionService conversionService = new ApplicationConversionService();
+						context.getBeanFactory().setConversionService(conversionService);
+						context.getEnvironment().setConversionService(conversionService);
+					});
 
 	@Test
 	public void testDefaultCacheManagerExists() {
+
 		this.contextRunner.withUserConfiguration(CoherenceAutoConfigurationTests.ConfigWithoutCacheManager.class)
 		.run((context) -> {
 			assertThat(context).hasSingleBean(CoherenceServer.class);
@@ -71,6 +97,16 @@ public class CoherenceAutoConfigurationTests {
 			assertThat(context).hasSingleBean(CacheManager.class);
 			assertThat(context).getBean(CacheManager.class).isInstanceOf(CoherenceCacheManager.class);
 		});
+	}
+
+	@Test
+	public void testUserProvidedNonCoherenceCacheManagerExists() {
+		this.contextRunner.withUserConfiguration(CoherenceAutoConfigurationTests.ConfigWithNonCoherenceCacheManager.class)
+				.run((context) -> {
+					assertThat(context).hasSingleBean(CoherenceServer.class);
+					assertThat(context).hasSingleBean(CacheManager.class);
+					assertThat(context).getBean(CacheManager.class).isInstanceOf(SimpleCacheManager.class);
+				});
 	}
 
 	@Test
@@ -140,6 +176,13 @@ public class CoherenceAutoConfigurationTests {
 	public void testSpringSystemPropertyResolverForSpringBoot() {
 		this.contextRunner.withUserConfiguration(CoherenceAutoConfigurationTests.ConfigWithoutEnableCaching.class)
 				.withSystemProperties("spring.profiles.active=coherenceNativePropertiesTests")
+				.withSystemProperties(
+						"coherence.properties.coherence.localhost=127.0.0.1",
+						"coherence.properties.coherence.ttl=0",
+						"coherence.properties.java.net.preferIPv4Stack=true",
+						"coherence.properties.coherence.wka=127.0.0.1",
+						"coherence.properties.coherence.cluster=CoherenceAutoConfigurationTestsCluster"
+				)
 				.run((context) -> {
 					final SystemPropertyResolver systemPropertyResolver = SystemPropertyResolver.getInstance();
 					assertThat(systemPropertyResolver).isNotNull();
@@ -147,7 +190,7 @@ public class CoherenceAutoConfigurationTests {
 					assertThat(systemPropertyResolver.getProperty("coherence.log.limit")).isEqualTo("444");
 					assertThat(systemPropertyResolver.getProperty("coherence.log.level")).isEqualTo("1");
 					assertThat(systemPropertyResolver.getProperty("coherence.log.logger")).isEqualTo("CoherenceSpring");
-					assertThat(systemPropertyResolver.getProperty("coherence.log")).isEqualTo("log4j");
+					assertThat(systemPropertyResolver.getProperty("coherence.log")).isEqualTo("jdk");
 					assertThat(systemPropertyResolver.getProperty("coherence.log.format")).isEqualTo("foobar");
 
 					final SystemPropertyResolver systemPropertyResolverFromSpringContext = context.getBean(SystemPropertyResolver.class);
@@ -156,7 +199,7 @@ public class CoherenceAutoConfigurationTests {
 					assertThat(systemPropertyResolverFromSpringContext.getProperty("coherence.log.limit")).isEqualTo("444");
 					assertThat(systemPropertyResolverFromSpringContext.getProperty("coherence.log.level")).isEqualTo("1");
 					assertThat(systemPropertyResolverFromSpringContext.getProperty("coherence.log.logger")).isEqualTo("CoherenceSpring");
-					assertThat(systemPropertyResolverFromSpringContext.getProperty("coherence.log")).isEqualTo("log4j");
+					assertThat(systemPropertyResolverFromSpringContext.getProperty("coherence.log")).isEqualTo("jdk");
 					assertThat(systemPropertyResolverFromSpringContext.getProperty("coherence.log.format")).isEqualTo("foobar");
 				});
 	}
@@ -175,6 +218,61 @@ public class CoherenceAutoConfigurationTests {
 				});
 	}
 
+	@Test
+	public void testCoherenceServerStartupTimeoutIsSet() {
+		this.contextRunner.withUserConfiguration(CoherenceAutoConfigurationTests.ConfigWithoutEnableCaching.class)
+				.withSystemProperties("spring.profiles.active=coherenceServerStartupTimeoutTest")
+				.run((context) -> {
+					final CoherenceConfigurer coherenceConfigurer = context.getBean(CoherenceConfigurer.class);
+					assertThat(coherenceConfigurer).isInstanceOf(DefaultCoherenceConfigurer.class);
+					DefaultCoherenceConfigurer defaultCoherenceConfigurer = (DefaultCoherenceConfigurer) coherenceConfigurer;
+					assertThat(defaultCoherenceConfigurer.getCoherenceServerStartupTimeout()).isEqualTo(Duration.ofMinutes(4));
+					assertThat(coherenceConfigurer.getCoherenceServer().getStartupTimeout()).isEqualTo(Duration.ofMinutes(4));
+
+					final Environment environment = context.getEnvironment();
+					assertThat(environment.getProperty("coherence.server.startup-timeout")).isEqualTo("4m");
+				});
+	}
+
+	@Test
+	public void testCoherenceServerDefaultStartupTimeoutIsSet() {
+		this.contextRunner.withUserConfiguration(CoherenceAutoConfigurationTests.ConfigWithoutEnableCaching.class)
+				.run((context) -> {
+					final CoherenceConfigurer coherenceConfigurer = context.getBean(CoherenceConfigurer.class);
+					assertThat(coherenceConfigurer).isInstanceOf(DefaultCoherenceConfigurer.class);
+					DefaultCoherenceConfigurer defaultCoherenceConfigurer = (DefaultCoherenceConfigurer) coherenceConfigurer;
+					assertThat(defaultCoherenceConfigurer.getCoherenceServerStartupTimeout()).isNull();
+					assertThat(coherenceConfigurer.getCoherenceServer().getStartupTimeout()).isEqualTo(Duration.ofMinutes(5));
+
+					final Environment environment = context.getEnvironment();
+					assertThat(environment.getProperty("coherence.server.startup-timeout")).isNull();
+				});
+	}
+
+	@Test
+	public void testExistenceOfCoherenceGenericConverter() {
+		this.contextRunner.withUserConfiguration(CoherenceAutoConfigurationTests.ConfigWithoutEnableCaching.class)
+				.run((context) -> {
+					final ConversionService conversionServiceFromBeanFactory = context.getBeanFactory().getConversionService();
+					final ConversionService conversionServiceFromEnvironment = context.getEnvironment().getConversionService();
+
+					assertThat(conversionServiceFromBeanFactory).isNotNull();
+					assertThat(conversionServiceFromEnvironment).isNotNull();
+					assertThat(conversionServiceFromEnvironment).isSameAs(conversionServiceFromBeanFactory);
+
+					assertThat(conversionServiceFromBeanFactory).isInstanceOf(ConfigurableConversionService.class);
+
+					final NamedCache<String, Integer> mockedNamedCache = Mockito.mock(NamedCache.class);
+					Mockito.when(mockedNamedCache.entrySet()).thenAnswer((invocation) ->
+						fail("entrySet() should never be called by converter.")
+					);
+					assertThat(conversionServiceFromBeanFactory.canConvert(NamedCache.class, Map.class)).isTrue();
+					final Map<String, Integer> result = conversionServiceFromBeanFactory.convert(mockedNamedCache, Map.class);
+					assertThat(result).isNotNull();
+					assertThat(result).isSameAs(mockedNamedCache);
+				});
+	}
+
 	@Configuration
 	@EnableCaching
 	static class ConfigWithCacheManager {
@@ -187,6 +285,15 @@ public class CoherenceAutoConfigurationTests {
 	@Configuration
 	@EnableCaching
 	static class ConfigWithoutCacheManager {
+	}
+
+	@Configuration
+	@EnableCaching
+	static class ConfigWithNonCoherenceCacheManager {
+		@Bean
+		CacheManager cacheManager() {
+			return new SimpleCacheManager();
+		}
 	}
 
 	@Configuration

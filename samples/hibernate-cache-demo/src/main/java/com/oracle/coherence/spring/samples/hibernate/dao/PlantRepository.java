@@ -1,16 +1,15 @@
 /*
- * Copyright (c) 2020, Oracle and/or its affiliates.
+ * Copyright (c) 2020, 2023, Oracle and/or its affiliates.
  *
  * Licensed under the Universal Permissive License v 1.0 as shown at
- * http://oss.oracle.com/licenses/upl.
+ * https://oss.oracle.com/licenses/upl.
  */
 package com.oracle.coherence.spring.samples.hibernate.dao;
 
 import java.util.List;
 
-import javax.persistence.QueryHint;
-
 import com.oracle.coherence.spring.samples.hibernate.model.Plant;
+import jakarta.persistence.QueryHint;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;

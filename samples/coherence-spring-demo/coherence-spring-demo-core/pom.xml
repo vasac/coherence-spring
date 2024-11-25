@@ -1,37 +1,24 @@
 <?xml version="1.0" encoding="UTF-8"?>
+
+<!--
+  Copyright (c) 2021, 2024, Oracle and/or its affiliates.
+  Licensed under the Universal Permissive License v 1.0 as shown at
+  https://oss.oracle.com/licenses/upl.
+-->
+
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
 	<modelVersion>4.0.0</modelVersion>
 
 	<parent>
 		<groupId>com.oracle.coherence.spring</groupId>
 		<artifactId>coherence-spring-demo-parent</artifactId>
-		<version>3.0.0-SNAPSHOT</version>
+		<version>4.2.1-SNAPSHOT</version>
 	</parent>
 
 	<artifactId>coherence-spring-demo-core</artifactId>
 
 	<name>Coherence Spring Demo - Core</name>
 	<description>Common code for the Coherence Spring Demo</description>
-
-	<properties>
-		<maven.minimum.version>3.6.0</maven.minimum.version>
-		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-		<project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
-
-		<java.version>8</java.version>
-		<coherence.version>21.06-M2</coherence.version>
-		<spring.version>5.3.9</spring.version>
-		<spring-data-bom.version>2021.0.0</spring-data-bom.version>
-		<jakarta.persistence-api.version>2.2.3</jakarta.persistence-api.version>
-		<hibernate.version>5.4.31.Final</hibernate.version>
-		<jackson-datatype.version>2.11.4</jackson-datatype.version>
-
-		<maven.minimum.version>3.6.0</maven.minimum.version>
-
-		<maven-compiler-plugin.version>3.8.1</maven-compiler-plugin.version>
-		<maven.enforcer.plugin.version>1.4.1</maven.enforcer.plugin.version>
-		<maven-surefire-plugin.version>2.22.2</maven-surefire-plugin.version>
-	</properties>
 
 	<dependencyManagement>
 		<dependencies>
@@ -47,7 +34,7 @@
 
 	<dependencies>
 		<dependency>
-			<groupId>com.oracle.coherence.ce</groupId>
+			<groupId>${coherence.groupId}</groupId>
 			<artifactId>coherence</artifactId>
 			<version>${coherence.version}</version>
 			<scope>provided</scope>
@@ -55,7 +42,7 @@
 		<dependency>
 			<groupId>org.springframework</groupId>
 			<artifactId>spring-webmvc</artifactId>
-			<version>${spring.version}</version>
+			<version>${org.springframework.version}</version>
 			<scope>provided</scope>
 		</dependency>
 		<dependency>
@@ -70,7 +57,7 @@
 			<scope>provided</scope>
 		</dependency>
 		<dependency>
-			<groupId>org.hibernate</groupId>
+			<groupId>org.hibernate.orm</groupId>
 			<artifactId>hibernate-core</artifactId>
 			<version>${hibernate.version}</version>
 			<scope>provided</scope>
@@ -80,6 +67,11 @@
 			<artifactId>jackson-datatype-jsr310</artifactId>
 			<version>${jackson-datatype.version}</version>
 			<scope>provided</scope>
+		</dependency>
+		<dependency>
+			<groupId>com.fasterxml.jackson.core</groupId>
+			<artifactId>jackson-databind</artifactId>
+			<version>2.18.0</version>
 		</dependency>
 	</dependencies>
 
@@ -105,7 +97,7 @@
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-enforcer-plugin</artifactId>
-				<version>${maven.enforcer.plugin.version}</version>
+				<version>${maven-enforcer-plugin.version}</version>
 				<executions>
 					<execution>
 						<id>enforce-plugin-versions</id>

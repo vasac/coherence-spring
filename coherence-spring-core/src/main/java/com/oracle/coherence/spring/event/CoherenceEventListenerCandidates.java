@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013, 2021, Oracle and/or its affiliates.
+ * Copyright (c) 2013, 2023, Oracle and/or its affiliates.
  *
  * Licensed under the Universal Permissive License v 1.0 as shown at
  * https://oss.oracle.com/licenses/upl.
@@ -19,11 +19,12 @@ import com.oracle.coherence.spring.event.mapevent.AnnotatedMapListener;
 import com.oracle.coherence.spring.event.mapevent.MapListenerRegistrationBean;
 import com.oracle.coherence.spring.event.mapevent.MethodMapListener;
 import com.tangosol.net.events.Event;
-import com.tangosol.net.events.internal.NamedEventInterceptor;
+import com.tangosol.net.events.NamedEventInterceptor;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 
 import org.springframework.beans.BeansException;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.ApplicationContextAware;
 
@@ -44,6 +45,8 @@ public class CoherenceEventListenerCandidates implements ApplicationContextAware
 
 	private ApplicationContext applicationContext;
 
+	private MapListenerRegistrationBean mapListenerRegistrationBean;
+
 	public CoherenceEventListenerCandidates(Map<String, List<Method>> coherenceEventListenerCandidateMethods) {
 		super();
 		this.coherenceEventListenerCandidateMethods = coherenceEventListenerCandidateMethods;
@@ -56,7 +59,6 @@ public class CoherenceEventListenerCandidates implements ApplicationContextAware
 	@SuppressWarnings({ "rawtypes", "unchecked" })
 	public void processEventListeners() {
 		final Map<String, List<Method>> candidates = this.getCoherenceEventListenerCandidateMethods();
-		final MapListenerRegistrationBean mapListenerRegistrationBean = this.applicationContext.getBean(MapListenerRegistrationBean.class);
 
 		for (Entry<String, List<Method>> entry : candidates.entrySet()) {
 			final String beanName = entry.getKey();
@@ -78,8 +80,8 @@ public class CoherenceEventListenerCandidates implements ApplicationContextAware
 				else {
 					// type is MapEvent
 					final MethodMapListener listener = new MethodMapListener(beanName, method, this.applicationContext);
-					final AnnotatedMapListener mapListener = new AnnotatedMapListener(listener, listener.getObservedQualifiers());
-					mapListenerRegistrationBean.addMapListener(mapListener);
+					final AnnotatedMapListener mapListener = new AnnotatedMapListener(listener);
+					this.mapListenerRegistrationBean.addMapListener(mapListener);
 				}
 			}
 		}
@@ -94,4 +96,8 @@ public class CoherenceEventListenerCandidates implements ApplicationContextAware
 		return this.interceptors;
 	}
 
+	@Autowired
+	public void setMapListenerRegistrationBean(MapListenerRegistrationBean mapListenerRegistrationBean) {
+		this.mapListenerRegistrationBean = mapListenerRegistrationBean;
+	}
 }

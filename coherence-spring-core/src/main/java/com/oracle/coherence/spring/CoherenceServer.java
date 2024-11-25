@@ -1,11 +1,12 @@
 /*
- * Copyright (c) 2013, 2021, Oracle and/or its affiliates.
+ * Copyright (c) 2013, 2024, Oracle and/or its affiliates.
  *
  * Licensed under the Universal Permissive License v 1.0 as shown at
  * https://oss.oracle.com/licenses/upl.
  */
 package com.oracle.coherence.spring;
 
+import java.time.Duration;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -36,7 +37,7 @@ public class CoherenceServer implements InitializingBean, SmartLifecycle, Applic
 	/**
 	 * Start up default of 60 seconds.
 	 */
-	public static final long DEFAULT_STARTUP_TIMEOUT_MILLIS = 60000;
+	public static final long DEFAULT_STARTUP_TIMEOUT_MILLIS = 300_000;
 
 	/**
 	 * Start up default of 60 seconds.
@@ -56,8 +57,8 @@ public class CoherenceServer implements InitializingBean, SmartLifecycle, Applic
 	/**
 	 * {@link Coherence} startup timeout in milliseconds.
 	 */
-	private long startupTimeout = Config.getLong(STARTUP_TIMEOUT_SYSTEM_PROPERTY,
-			DEFAULT_STARTUP_TIMEOUT_MILLIS);
+	private Duration startupTimeout = Duration.ofMillis(Config.getLong(STARTUP_TIMEOUT_SYSTEM_PROPERTY,
+			DEFAULT_STARTUP_TIMEOUT_MILLIS));
 
 	/**
 	 * Create a {@link CoherenceServer}.
@@ -77,7 +78,7 @@ public class CoherenceServer implements InitializingBean, SmartLifecycle, Applic
 	 *        or to what the system property {@value #STARTUP_TIMEOUT_SYSTEM_PROPERTY}
 	 *        specifies
 	 */
-	public CoherenceServer(Coherence coherence, long startupTimeout) {
+	public CoherenceServer(Coherence coherence, Duration startupTimeout) {
 		this.coherence = coherence;
 		this.startupTimeout = startupTimeout;
 	}
@@ -107,6 +108,9 @@ public class CoherenceServer implements InitializingBean, SmartLifecycle, Applic
 	@Override
 	public void setApplicationContext(ApplicationContext applicationContext) throws BeansException {
 		this.applicationContext = applicationContext;
+		// We need to ensure that the context is injected into the CoherenceContext to work around
+		// any race where Spring may not yet have done this for us
+		CoherenceContext.setApplicationContext(applicationContext);
 	}
 
 	@Override
@@ -115,9 +119,12 @@ public class CoherenceServer implements InitializingBean, SmartLifecycle, Applic
 			return;
 		}
 		try {
-			this.coherence.start().get(this.startupTimeout, TimeUnit.MILLISECONDS);
+			this.coherence.start().get(this.startupTimeout.toMillis(), TimeUnit.MILLISECONDS);
 		}
 		catch (InterruptedException | ExecutionException | TimeoutException ex) {
+			if (ex instanceof InterruptedException) {
+				Thread.currentThread().interrupt();
+			}
 			throw new IllegalStateException(String.format("Oracle Coherence did not start "
 					+ "successfully within within the specified timeout period of %sms", this.startupTimeout), ex);
 		}
@@ -128,12 +135,15 @@ public class CoherenceServer implements InitializingBean, SmartLifecycle, Applic
 		if (logger.isInfoEnabled()) {
 			logger.info("Stopping Coherence");
 		}
-		if (this.coherence != null) {
-			this.coherence.close();
-		}
+
 		Coherence.closeAll();
+
 		if (logger.isInfoEnabled()) {
 			logger.info("Stopped Coherence");
 		}
+	}
+
+	public Duration getStartupTimeout() {
+		return this.startupTimeout;
 	}
 }

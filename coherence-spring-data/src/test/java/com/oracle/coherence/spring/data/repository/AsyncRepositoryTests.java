@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013, 2021, Oracle and/or its affiliates.
+ * Copyright (c) 2013, 2023, Oracle and/or its affiliates.
  *
  * Licensed under the Universal Permissive License v 1.0 as shown at
  * https://oss.oracle.com/licenses/upl.
@@ -23,10 +23,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import javax.inject.Inject;
-
 import com.oracle.coherence.spring.configuration.annotation.EnableCoherence;
-import com.oracle.coherence.spring.data.AbstractDataTest;
+import com.oracle.coherence.spring.data.AbstractDataTests;
 import com.oracle.coherence.spring.data.config.EnableCoherenceRepositories;
 import com.oracle.coherence.spring.data.model.Author;
 import com.oracle.coherence.spring.data.model.Book;
@@ -38,6 +36,7 @@ import com.tangosol.util.Fragment;
 import com.tangosol.util.UUID;
 import com.tangosol.util.function.Remote;
 import com.tangosol.util.stream.RemoteCollectors;
+import jakarta.inject.Inject;
 import org.junit.jupiter.api.Test;
 
 import org.springframework.context.annotation.Configuration;
@@ -58,7 +57,7 @@ import static org.assertj.core.data.Percentage.withPercentage;
 
 @SpringJUnitConfig(AsyncRepositoryTests.Config.class)
 @DirtiesContext
-public class AsyncRepositoryTests extends AbstractDataTest {
+public class AsyncRepositoryTests extends AbstractDataTests {
 
 	@SuppressWarnings({"SpringJavaInjectionPointsAutowiringInspection", "CdiInjectionPointsInspection"})
 	@Inject
@@ -975,7 +974,7 @@ public class AsyncRepositoryTests extends AbstractDataTest {
 	// ----- helper methods -------------------------------------------------
 
 	Filter<Author> author() {
-		return equal("author", AbstractDataTest.FRANK_HERBERT);
+		return equal("author", AbstractDataTests.FRANK_HERBERT);
 	}
 
 	@Configuration

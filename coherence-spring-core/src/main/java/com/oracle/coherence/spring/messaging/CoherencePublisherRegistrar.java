@@ -15,7 +15,7 @@
  */
 
 /*
- * Copyright (c) 2021 Oracle and/or its affiliates.
+ * Copyright (c) 2021, 2023 Oracle and/or its affiliates.
  */
 package com.oracle.coherence.spring.messaging;
 
@@ -42,6 +42,8 @@ import org.springframework.util.StringUtils;
  * @author Artem Bilan
  * @author Gary Russell
  * @author Andy Wilksinson
+ * @author Vaso Putica
+ * @author Gunnar Hillert
  *
  * @since 3.0
  */
@@ -56,10 +58,15 @@ public class CoherencePublisherRegistrar implements ImportBeanDefinitionRegistra
 			Assert.isTrue(importingClassMetadata.isInterface(),
 					"@CoherencePublisher can only be specified on an interface");
 
-			Map<String, Object> annotationAttributes = importingClassMetadata.getAnnotationAttributes(CoherencePublisher.class.getName());
+			final Map<String, Object> annotationAttributes = importingClassMetadata.getAnnotationAttributes(CoherencePublisher.class.getName());
+
+			if (annotationAttributes == null) {
+				throw new IllegalStateException("Unable to retrieve annotationAttributes for CoherencePublisher annotations");
+			}
+
 			annotationAttributes.put(SERVICE_INTERFACE_ATTR, importingClassMetadata.getClassName());
 			annotationAttributes.put(PROXY_DEFAULT_METHODS_ATTR, "" + annotationAttributes.remove(PROXY_DEFAULT_METHODS_ATTR));
-			BeanDefinitionHolder benDefinitionHolder = parse(annotationAttributes);
+			final BeanDefinitionHolder benDefinitionHolder = parse(annotationAttributes);
 			BeanDefinitionReaderUtils.registerBeanDefinition(benDefinitionHolder, registry);
 		}
 	}
@@ -77,7 +84,13 @@ public class CoherencePublisherRegistrar implements ImportBeanDefinitionRegistra
 		beanDefinitionBuilder.addPropertyValue("maxBlock", attributes.get("maxBlock"));
 
 		AbstractBeanDefinition beanDefinition = beanDefinitionBuilder.getBeanDefinition();
-		beanDefinition.setAttribute(FactoryBean.OBJECT_TYPE_ATTRIBUTE, serviceInterface);
+		try {
+			beanDefinition.setAttribute(FactoryBean.OBJECT_TYPE_ATTRIBUTE, Class.forName(serviceInterface));
+		}
+		catch (ClassNotFoundException ex) {
+			throw new IllegalStateException(String.format("Unable to get the class for the provided serviceInterface name '%s'.",
+					serviceInterface), ex);
+		}
 
 		String id = (String) attributes.get("name");
 		if (!StringUtils.hasText(id)) {

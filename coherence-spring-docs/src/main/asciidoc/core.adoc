@@ -77,11 +77,14 @@ implementation("com.oracle.coherence.ce:coherence:{commercial-coherence-version}
 NOTE: Coherence CE versions are available from Maven Central. The commercial versions of Coherence needs to be uploaded
 into your own Maven repository.
 
+IMPORTANT: Coherence Spring requires as a minimum version *Coherence CE* `22.06`.
+
 [[coherence-spring-botstrap]]
 == Bootstrapping Coherence
 
-Coherence Spring uses the Coherence bootstrap API introduced in Coherence CE `20.12` to
-configure and create Coherence instances. This means that Coherence resources in a Spring application are typically
+Coherence Spring uses the Coherence
+{coherence-docs}develop-applications/starting-and-stopping-cluster-members.html#GUID-A74280C1-AB23-48DB-8C0D-E494230ABFCA[Bootstrap API]
+to configure and create Coherence instances. This means that Coherence resources in a Spring application are typically
 part of a Coherence Session.
 
 By default, Coherence will start a single Session configured to use the default Coherence configuration file. This
@@ -96,17 +99,14 @@ import the `CoherenceSpringConfiguration` class under the covers. Therefore, you
 
 In most use-cases, only a single Coherence Session is expected to be used. Therefore, without providing any further
 configuration the default session is configured using the embedded default configuration file. This results in the application
-joining Coherence as a cluster member (Session type `SERVER`). This is of course not the only way. Coherence Spring support
-the following 3 session types:
+joining Coherence as a _cluster_ member (Session type `SERVER`). This is of course not the only way. Coherence Spring support
+the following 2 session types:
 
 - *SERVER* - Join as Coherence cluster member. This is the default session type.
-- *CLIENT* - Connect to Coherence as a Coherence*Extend client
-- *GRPC* - Connect to Coherence as gRPC client
+- *CLIENT* - Connect to Coherence as a Coherence*Extend or gRPC client
 
-If the application is a Coherence cluster member, or a Coherence*Extend client, then all that needs to be specified is
-the Coherence configuration file name. For instance, you may for example provide an implementation of
-the `AbstractSessionConfigurationBean`, to specify the type of your session and to use a custom Coherence configuration
-file.
+In order to configure the type of your Session, you may declare a `SessionConfigurationBean` that allows to you to not only
+to set the session type but also to specify a custom Coherence configuration file or a custom session name.
 
 .SessionConfigurationBean
 [source,java,indent=1,subs="verbatim,quotes,attributes"]
@@ -120,23 +120,6 @@ SessionConfigurationBean sessionConfigurationBeanDefault() {
     return sessionConfigurationBean;
 }
 ----
-
-If you connect as gRPC client, however, the properties change slightly and you need to specify a
-`GrpcSessionConfigurationBean`:
-
-.GrpcSessionConfigurationBean
-[source,java,indent=1,subs="verbatim,quotes,attributes"]
-----
-@Bean
-GrpcSessionConfigurationBean grpcSessionConfigurationBean() {
-    final GrpcSessionConfigurationBean sessionConfigurationBean = new GrpcSessionConfigurationBean();
-    sessionConfigurationBean.setName("sessionName");
-    sessionConfigurationBean.setChannelName("grpcChanelBeanName");
-    return sessionConfigurationBean;
-}
-----
-
-The Channel Name property would refer to a grpcChannel bean.
 
 [[coherence-spring-botstrap-with-multiple-session]]
 == Configure Multiple Sessions
@@ -170,7 +153,6 @@ The session type of this configuration. There are three different types of sessi
 
 - *server* represents storage enabled cluster member session.
 - *client* represents a storage disabled cluster member or Coherence*Extend client session.
-- *grpc* is a gRPC client session (see the gRPC documentation).
 
 The type of the session affects how the bootstrap API starts the session.
 
@@ -186,22 +168,6 @@ The following property applies to the `CLIENT` (Coherence*Extend) and `Server` m
 The Coherence cache configuration URI for the session. As already mentioned, the most common configuration to set will
 be the Coherence configuration file name. If not specified, the default value will be `coherence-cache-config.xml`.
 
-The following property applies to the `GRPC` mode, only:
-
-**channelName**
-
-Sets the underlying gRPC channel. If not set, it will default to `localhost` and port `1408`.
-
-**serializer**
-
-Specifies the serializer to that shall be used, in order to serialize gRPC message payloads. If not specified,
-the serializer will be the default Coherence serializer, either POF if it has been enabled with the `coherence.pof.enabled`
-system property or Java serialization.
-
-**tracingEnabled**
-
-Specifies if client gRPC tracing should be enabled. This is `false` by default.
-
 [[coherence-spring-dependency-injection]]
 == Dependency Injection
 
@@ -210,6 +176,16 @@ Coherence Spring provides comprehensive support for the injection Coherence obje
 
 For the most part, you can use the equivalent Coherence Spring annotation that match the annotations from Coherence's CDI
 or Micronaut support.
+
+[IMPORTANT]
+====
+All Coherence resources that are used by Spring application code should be injected using Spring dependency injection, only.
+Applications should avoid calling Coherence APIs that create or initialize Coherence resources directly, especially
+static {coherence-api}com/tangosol/net/CacheFactory.html[CacheFactory] methods. If your Spring application code calls
+these Coherence APIs it may cause Coherence to be initialized too early in the start-up process, before Spring has
+initialized the Coherence extensions. A typical symptom of this would be that Coherence starts without picking up the
+correct configuration from Spring.
+====
 
 [[coherence-spring-dependency-injection-namedmap-namedcache]]
 === Injecting NamedMap and NamedCache
@@ -229,10 +205,10 @@ limitations, for instance, not being usable for constructor injection.
 [source,java]
 ----
     @Resource(name = COHERENCE_CACHE_BEAN_NAME)
-    private NamedCache numbers;                  <1>
+    private NamedCache numbers;                  // <1>
 
     @Resource(name = COHERENCE_CACHE_BEAN_NAME)
-    @Name("numbers")                             <2>
+    @Name("numbers")                             // <2>
     private NamedCache namedCache;
 ----
 <1> If not specified, the name of the field will be used to determine the cache name
@@ -259,13 +235,56 @@ the name of the Coherence session as part of the annotation. E.g., the above exa
 [source,java]
 ----
     @CoherenceCache
-    private NamedCache numbers;                  <1>
+    private NamedCache numbers;                  // <1>
 
-    @CoherenceCache("numbers")                   <2>
+    @CoherenceCache("numbers")                   // <2>
     private NamedCache namedCache;
 ----
 <1> If not specified, the name of the field will be used to determine the cache name
 <2> Alternatively, you can specify the name of the cache using the `@Name` annotation
+
+[IMPORTANT]
+====
+All the annotations `@CoherenceCache`, `@CoherenceMap`, `@CoherenceAsyncCache`, and `@CoherenceAsyncMap` are themselves
+annotated with `@Lazy`. This is to avoid deadlocks where a cache bean requires another bean to be injected in its
+configuration, which will happen on a different thread to the main Spring thread. A consequence of this is that all
+cache beans will be Spring lazy dynamic proxies.
+====
+
+[[coherence-spring-dependency-injection-type-conversion]]
+==== Type Conversion of NamedMap and NamedCache
+
+As mentioned previously, Spring a has a special relationship with Map implementations. In order to work around this
+limitation, we provide the meta-annotations `@CoherenceCache`, `@CoherenceMap` etc. We apply a little trick using the
+`@Value` annotation and referencing the injection candidate via a `SpEL` expression. This in turn, however, triggers type
+conversion in Spring's `DefaultListableBeanFactory`, and we must provide a no-op converter for Map-based Coherence objects
+using the `CoherenceGenericConverter`.
+
+Without it, you may see Spring's `MapToMapConverter` being used, which in turn will call `Map#entrySet()`, a potentially
+very expensive operation for large datasets in a Coherence cluster.
+
+IMPORTANT: When defining your own `ConversionService` bean, please make sure that the `CoherenceGenericConverter` is added to it.
+
+If the `BeanFactory` already contains a `ConfigurableConversionService`, we will add the `CoherenceGenericConverter` automatically
+using the `CoherenceConversionServicePostProcessor`. This should be typically the case with Spring Boot, which provides
+the `ApplicationConversionService`. If you provide your own `ConversionService` bean, we will back-off and a message to
+add the `CoherenceGenericConverter` manually will be logged.
+
+.Manually adding the `CoherenceGenericConverter`
+[source,java]
+----
+    @Bean
+    public ConversionService conversionService() {
+        DefaultFormattingConversionService conversionService =
+            new DefaultFormattingConversionService();
+        conversionService.addConverter(new CoherenceGenericConverter());   // <1>
+        return conversionService;
+    }
+----
+<1> Adding a new instance of the CoherenceGenericConverter
+
+In case no `ConversionService` is defined in your application context, PropertyEditors are being used, and that chain
+does not seem to trigger the same expensive operation, nonetheless using the `ConversionService` route is advised.
 
 ==== Specify the Map/Cache Name
 
@@ -378,7 +397,7 @@ point. A view is a sub-set of the data in an underlying cache, controlled by a
 [source,java]
 ----
 @CoherenceMap("people")
-@View                                            <1>
+@View                                            // <1>
 private NamedMap<String, Person> map;
 ----
 <1> The injection point has been annotated with `@View`, so the injected `NamedMap` will actually be an implementation
@@ -451,7 +470,7 @@ could be used to specify that the values should be transformed using a property 
 .Injecting a @CoherenceMap with multiple @WhereFilter
 [source,java]
 ----
-include::{include-source-code}di/viewtransformer/PeopleService.java[tags=!hide]
+include::{include-source-code}di/viewtransformer/PeopleService.java[tags=!*]
 ----
 <1> The name of the underlying map for the view is "people".
 <2> The `@View` annotation specifies that a view will be injected rather than a raw `NamedMap`.
@@ -489,7 +508,7 @@ Spring-supported injection annotation such as `@Autowired` or `@Inject`:
 ----
 @RestController
 public class MyBean {
-    @Inject                                      <1>
+    @Inject                                      // <1>
     private Session session;
 ----
 <1> Other injection annotations such as `@Autowired` can be used as well
@@ -499,7 +518,7 @@ public class MyBean {
 ----
 @RestController
 public class MyBean {
-    @Autowired                                   <1>
+    @Autowired                                   // <1>
     public MyBean(Session session) {
         // TODO...
     }
@@ -522,7 +541,7 @@ the injection point.
 ----
 @RestController
 public class MyBean {
-    @Autowired                                   <1>
+    @Autowired                                   // <1>
     @Name("Catalog")
     private Session session;
 }
@@ -536,7 +555,7 @@ or into a constructor:
 ----
 @RestController
 public class MyBean {
-    @Autowired                                   <1>
+    @Autowired                                   // <1>
     public MyBean(@Name("Catalog") Session session) {
         // TODO...
     }
@@ -751,6 +770,100 @@ link:{coherence-spring-api}com/oracle/coherence/spring/annotation/SessionName.ht
 private Subscriber<Order> orders;
 ----
 
+[[injecting-spring-beans-into-coherence-managed-objects]]
+== Injecting Spring Beans into Coherence-Managed Objects
+
+Coherence has many server-side extension points, which enable you to customize application behavior in different ways,
+typically by configuring their extensions within various sections of the cache configuration file. For example, you can
+implement event interceptors and cache stores to handle server-side events and integrate with external data stores
+and other services. In the previous chapter, you learned how you can inject Coherence-managed objects into your
+Spring-managed beans. However, the reverse is possible as well. Coherence Spring also provides the ability to inject
+Spring beans into these Coherence-managed extension points using the custom configuration namespace handler.
+
+[source,xml]
+.coherence-cache-config.xml with Spring NamespaceHandler
+----
+include::{include-source-code-samples-cachestore-resources}coherence-cache-config.xml[tag=header]
+----
+
+After you have declared the handler for the Spring namespace above, you can specify the `<spring:bean>` element in any
+place where you would normally use the `<class-name>` or `<class-factory-name>` elements:
+
+[source,xml]
+.Using Spring bean references in coherence-cache-config.xml
+----
+<?xml version="1.0"?>
+<cache-config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xmlns="http://xmlns.oracle.com/coherence/coherence-cache-config"
+        xmlns:spring="class://com.oracle.coherence.spring.namespace.NamespaceHandler"
+        xsi:schemaLocation="http://xmlns.oracle.com/coherence/coherence-cache-config coherence-cache-config.xsd">
+
+    <interceptors>
+        <interceptor>
+            <instance>
+                <spring:bean>registrationListener</spring:bean> <!--1-->
+            </instance>
+        </interceptor>
+        <interceptor>
+            <instance>
+                <spring:bean>activationListener</spring:bean>
+            </instance>
+        </interceptor>
+    </interceptors>
+
+    <caching-scheme-mapping>
+        <cache-mapping>
+            <cache-name>*</cache-name>
+            <scheme-name>distributed-scheme</scheme-name>
+            <init-params>
+                <init-param>
+                    <param-name>partitionListener-bean</param-name> <!--2-->
+                    <param-value>partitionListener</param-value>
+                </init-param>
+            </init-params>
+            <interceptors>
+                <interceptor>
+                    <instance>
+                        <spring:bean>cacheListener</spring:bean>
+                    </instance>
+                </interceptor>
+            </interceptors>
+        </cache-mapping>
+    </caching-scheme-mapping>
+
+    <caching-schemes>
+        <distributed-scheme>
+            <scheme-name>distributed-scheme</scheme-name>
+            <service-name>PartitionedCache</service-name>
+            <local-storage system-property="coherence.distributed.localstorage">true</local-storage>
+            <partition-listener>
+                <spring:bean>{partitionListener-bean}</spring:bean> <!--3-->
+            </partition-listener>
+            <member-listener>
+                <spring:bean>memberListener</spring:bean>
+            </member-listener>
+            <backing-map-scheme>
+                <local-scheme/>
+            </backing-map-scheme>
+            <autostart>true</autostart>
+            <interceptors>
+                <interceptor>
+                    <instance>
+                        <spring:bean>storageListener</spring:bean>
+                    </instance>
+                </interceptor>
+            </interceptors>
+        </distributed-scheme>
+    </caching-schemes>
+</cache-config>
+----
+<1> Specifying the name of the Spring bean that you want to reference.
+<2> The name of Spring beans can also be parameterized. Let's create a parameter named `partitionListener-bean` with the name of the Spring bean as its value.
+<3> Here we reference the parameter named `partitionListener-bean` and its value will be used.
+
+TIP: Please also take a look at the chapter discussing the
+<<coherence-spring-cachestore-demo, Coherence Spring Cachestore Demo>> as it uses Spring-managed beans.
+
 [[coherence-spring-events]]
 == Events
 
@@ -818,7 +931,7 @@ and the application has logic that should be executed each time a new `Plant` is
 .Example of listening to Inserted events
 [source,java]
 ----
-include::{include-source-code}event/PersonEventHandler.java[tags=!hide]
+include::{include-source-code}event/PersonEventHandler.java[tag=!*]
 ----
 <1> The `PersonController` is a simple Spring bean, in this case a `Controller`.
 <2> The `onNewPerson` method is annotated with `@CoherenceEventListener` making it a Coherence event listener.
@@ -1765,7 +1878,7 @@ First create a simple annotation, it could be called something like `PlantNameEx
 
 [source,java]
 ----
-include::{include-source-code}filterbinding/LargePalmTrees.java[tags=!hide]
+include::{include-source-code}filterbinding/LargePalmTrees.java[tags=!*]
 ----
 <1> The annotation class is annotated with `@FilterBinding`
 <2> The annotation name is `PlantNameExtractor`
@@ -1779,7 +1892,7 @@ that will produce instances of the required `Filter`.
 
 [source,java]
 ----
-include::{include-source-code}filterbinding/LargePalmTreesFilterFactory.java[tags=!hide]
+include::{include-source-code}filterbinding/LargePalmTreesFilterFactory.java[tags=!*]
 ----
 <1> The class is annotated with the `PlantNameExtractor` filter binding annotation
 <2> The class must be a Spring bean, let's annotate it with `@Component` so that component scanning will pick this class
@@ -1799,14 +1912,14 @@ adding a value parameter representing the height like this:
 public @interface PalmTrees {
     String value();
 }
-include::{include-source-code}filterbinding/PalmTrees.java[tags=!hide]
+include::{include-source-code}filterbinding/PalmTrees.java[tags=!*]
 ----
 
 We then need to modify our filter factory to use the height value:
 
 [source,java]
 ----
-include::{include-source-code}filterbinding/PalmTreesFilterFactory.java[tags=!hide]
+include::{include-source-code}filterbinding/PalmTreesFilterFactory.java[tags=!*]
 ----
 <1> The class is annotated with the more flexible `PalmTrees` filter binding annotation accepting a height parameter
 <2> The class must be a Spring bean, let's annotate it with `@Component` so that component scanning will pick this class
@@ -1820,7 +1933,7 @@ Now the application code where the view is to be injected can use the custom fil
 
 [source,java]
 ----
-include::{include-source-code}filterbinding/PlantService.java[tags=!hide]
+include::{include-source-code}filterbinding/PlantService.java[tags=!*]
 ----
 <1> The `@View` annotation indicates that this is a view rather than a plain `NamedMap`
 <2> The `@PalmTrees` annotation links to the custom filter factory which is used to create the filter for the view. The
@@ -1854,12 +1967,12 @@ First create a simple annotation called `PlantName`
 
 [source,java]
 ----
-@ExtractorBinding                         // <1>
+@ExtractorBinding                                // <1>
 @Documented
 @Retention(RetentionPolicy.RUNTIME)
-public @interface PersonAge {            // <2>
+public @interface PersonAge {                    // <2>
 }
-include::{include-source-code}extractorbinding/PlantNameExtractor.java[tags=!hide]
+include::{include-source-code}extractorbinding/PlantNameExtractor.java[tags=!*]
 ----
 <1> The annotation class is annotated with `@ExtractorBinding`
 <2> The annotation name is `PlantNameExtractor`
@@ -1873,7 +1986,7 @@ implementation that will produce instances of the required `ValueExtractor`.
 
 [source,java]
 ----
-include::{include-source-code}extractorbinding/PlantNameExtractorFactory.java[tags=!hide]
+include::{include-source-code}extractorbinding/PlantNameExtractorFactory.java[tags=!*]
 ----
 <1> The class is annotated with the `PlantNameExtractor` extractor binding annotation
 <2> The class must be a Spring bean, let's annotate it with `@Component` so that component scanning will pick this class
@@ -1889,11 +2002,11 @@ Now the application code where the view is to be injected can use the custom ext
 
 [source,java]
 ----
-@View               // <1>
-@PersonAge          // <2>
-@Name("people")     // <3>
-private NamedMap<String, Integer> ages;   // <4>
-include::{include-source-code}extractorbinding/PlantService.java[tags=!hide]
+@View                                            // <1>
+@PersonAge                                       // <2>
+@Name("people")                                  // <3>
+private NamedMap<String, Integer> ages;          // <4>
+include::{include-source-code}extractorbinding/PlantService.java[tags=!*]
 ----
 <1> The `@View` annotation indicates that this is a view rather than a plain `NamedMap`
 <2> The `@PlantNameExtractor` annotation links to the custom extractor factory used to create the `ValueExtractor` for the view
@@ -1902,7 +2015,7 @@ which also has takes an optional value to specify the underlying cache/map name 
 <4> Note that the `NamedMap` generics are now `Long` and `String` instead of `Long` and `Plant` as the `Plant` values
 from the underlying cache are transformed into `String` values by extracting just the name property.
 
-[[coherence-spring-messaging-with-coherence-topics]]
+[id=coherence-spring-messaging-with-coherence-topics]
 == Messaging with Coherence Topics
 
 Spring Coherence integration provides support for message driven applications by virtue of Coherence topics.
@@ -1939,11 +2052,11 @@ For example the following is a trivial `@CoherencePublisher` interface:
 import com.oracle.coherence.spring.annotation.CoherencePublisher;
 import com.oracle.coherence.spring.annotation.Topic;
 
-@CoherencePublisher  // <1>
+@CoherencePublisher                              // <1>
 public interface ProductClient {
 
-    @Topic("my-products") // <2>
-    void sendProduct(String message); // <3>
+    @Topic("my-products")                        // <2>
+    void sendProduct(String message);            // <3>
 
     void sendProduct(@Topic String topic, String message); // <4>
 }
@@ -2008,11 +2121,11 @@ The following example will listen for messages published by the `ProductClient` 
 import com.oracle.coherence.spring.annotation.CoherenceTopicListener;
 import com.oracle.coherence.spring.annotation.Topic;
 
-@CoherenceTopicListener   // <1>
+@CoherenceTopicListener                          // <1>
 public class ProductListener {
 
-    @Topic("my-products")   // <2>
-    public void receive(String product) { // <3>
+    @Topic("my-products")                        // <2>
+    public void receive(String product) {        // <3>
         System.out.println("Got Product - " + product);
     }
 }
@@ -2100,7 +2213,7 @@ In the example above a `MANUAL` commit strategy has used. The element will be co
 
 ==== Forwarding Messages with @SendTo
 
-On any @link:{coherence-spring-api}com/oracle/coherence/spring/annotation/CoherenceTopicListener.html[@CoherenceTopicListener] method that returns a value, you can use the @SendTo annotation to forward the return value to the topic or topics specified by the @SendTo annotation.
+On any link:{coherence-spring-api}com/oracle/coherence/spring/annotation/CoherenceTopicListener.html[@CoherenceTopicListener] method that returns a value, you can use the @SendTo annotation to forward the return value to the topic or topics specified by the @SendTo annotation.
 
 The key of the original ConsumerRecord will be used as the key when forwarding the message.
 
@@ -2113,11 +2226,11 @@ import org.springframework.messaging.handler.annotation.SendTo;
 @CoherenceTopicListener
 public class ProductListener {
 
-    @Topic("awesome-products")      // <1>
-    @SendTo("product-quantities")   // <2>
+    @Topic("awesome-products")                   // <1>
+    @SendTo("product-quantities")                // <2>
     public int receive(Product product) {
         System.out.println("Got Product - " + product.getName() + " by " + product.getBrand());
-        return product.getQuantity(); // <3>
+        return product.getQuantity();            // <3>
     }
 }
 ----
@@ -2138,12 +2251,12 @@ import reactor.core.publisher.Mono;
 @CoherenceTopicListener
 public class ProductListener {
 
-    @Topic("awesome-products")       // <1>
-    @SendTo("product-quantities")    // <2>
+    @Topic("awesome-products")                   // <1>
+    @SendTo("product-quantities")                // <2>
     public Mono<Integer> receiveProduct(Mono<Product> productSingle) {
         return productSingle.map(product -> {
             System.out.println("Got Product - " + product.getName() + " by " + product.getBrand());
-            return product.getQuantity();  // <3>
+            return product.getQuantity();        // <3>
         });
     }
 }
@@ -2152,3 +2265,259 @@ public class ProductListener {
 <1> The topic subscribed to is `awesome-products`
 <2> The topic to send the result to is `product-quantities`
 <3> The return is mapped from the single to the value of the quantity
+
+[[coherence-spring-cachestore]]
+== Cache Store
+
+Coherence Spring provides dedicated support for database-backed caches using JPA. Spring Data's
+{spring-docs-data-jpa}#jpa.repositories[JPA Repositories] make basic CRUD database access very simple. An application
+developer can just provide an interface that extends `JpaRepository` with the required generic parameters and
+Spring will do the rest.
+
+Coherence caches that are backed by a database have two options for how the database integration is provided:
+
+* {coherence-api}com/tangosol/net/cache/CacheLoader.html[CacheLoader] - an application developer writes an implementation of a `CacheLoader` to read data from a database for
+a given key (or keys), convert it to entities that are then loaded into a cache for the given keys.
+* {coherence-api}com/tangosol/net/cache/CacheStore.html[CacheStore] - whilst a `CacheLoader` only loads from a database into a cache, a `CacheStore` (which extends
+`CacheLoader`) also stores cached entities back to the database, or for entries deleted from the cache, erases the
+corresponding values from the database. The parallels between a `CacheLoader` or `CacheStore` and a `JpaRepository`
+should be pretty obvious.
+
+The Coherence Spring core module provides two interfaces:
+
+- {coherence-spring-api}com/oracle/coherence/spring/cachestore/JpaRepositoryCacheLoader.html[JpaRepositoryCacheLoader], which extends both `JpaRepository` and `CacheLoader`
+- {coherence-spring-api}com/oracle/coherence/spring/cachestore/JpaRepositoryCacheStore.html[JpaRepositoryCacheStore], which extends both `JpaRepository` and `CacheStore`.
+
+To create a JPA repository cache loader or cache store, all a developer needs to do is extend the relevant interface
+`JpaRepositoryCacheLoader` or `JpaRepositoryCacheStore` with the correct generic parameters. We will illustrate the use
+of Cache Stores using the following example.
+
+NOTE: Please also look at the reference documentation chapter <<injecting-spring-beans-into-coherence-managed-objects>>.
+
+[[coherence-spring-cachestore-demo]]
+=== JPA Repository CacheStore Demo
+
+In this demo we are show-casing how to use Spring Data JPA repository beans as Coherence CacheStores in
+applications using the https://github.com/coherence-community/coherence-spring[Coherence Spring project].
+
+The demo is split into multiple Maven modules in order to show-case `2` use-cases:
+
+* Embedded Coherence
+* Connect to a remote Coherence instance cache using
+{coherence-docs}develop-remote-clients/introduction-coherenceextend.html[Coherence*Extend]
+
+The Maven Project is structured into the following modules:
+
+* *coherence-cachestore-demo-app* Main entry point for the demo using an embedded Coherence instance
+* *coherence-cachestore-demo-server* Remote Coherence server we will connect to using Coherence*Extend
+* *coherence-cachestore-demo-core* Contains common code shared between the local app and the remote Coherence server version
+
+[[coherence-spring-cachestore-demo-model]]
+==== Data Model
+
+At its core (and in the `coherence-cachestore-demo-core` module), the application has a simple class called `Person` that
+is annotated with basic JPA annotations:
+
+[source,java]
+----
+include::{include-source-code-samples-cachestore}model/Person.java[tag=person]
+----
+
+The identifier of a `Person` is defined as `Long`, so in our Coherence-based application we would put these `Person`
+instances into a Coherence `NamedMap<Long, Person>`.
+
+[[coherence-spring-cachestore-demo-jpa-repository]]
+==== Writing a JPA Repository CacheStore
+
+To write a JPA repository `CacheStore` that can be used by our people cache we need to create a simple Spring Data
+repository interface:
+
+[source,java]
+----
+include::{include-source-code-samples-cachestore}model/PersonRepository.java[tag=imports]
+
+include::{include-source-code-samples-cachestore}model/PersonRepository.java[tag=personRepo]
+----
+
+That is all the code required to write a `CacheStore` that can be plugged into Coherence. Spring Data will take care of
+actually generating the implementation of the interface, and supplying that implementation as a bean.
+
+[[coherence-spring-cachestore-demo-embedded]]
+==== Embedded Coherence
+
+In the embedded Coherence CacheStore demo we use a co-located Coherence instance that will start
+as part of the application itself.
+
+To use a `CacheStore` in Coherence, it needs to be configured in the Coherence cache configuration file, which in the
+embedded use-case is `coherence-cache-config.xml`. In order to use the repository bean as a `CacheStore`, we will make
+use of the Coherence Spring feature that allows injection of Spring beans into the cache configuration file.
+
+To use Spring bean injection in the configuration file we need to declare a custom namespace in the root XML element that
+references the Coherence Spring `NamespaceHandler`.
+
+[source,xml]
+.coherence-cache-config.xml
+----
+include::{include-source-code-samples-cachestore-resources}coherence-cache-config.xml[tag=header]
+----
+
+The `xmlns:spring="class://com.oracle.coherence.spring.namespace.NamespaceHandler"` line declares the custom namespace,
+so elements with a prefix `spring` will be handled by the `com.oracle.coherence.spring.namespace.NamespaceHandler` class.
+The custom namespace handler allows us to use elements of the form `<spring:bean>bean-name</spring:bean>` anywhere in the
+configuration that Coherence normally allows an `<instance>` element or a `<class-scheme>` element.
+
+Thus, we can add a scheme to the `<cache-schemes>` section of the configuration that uses the repository bean.
+
+[source,xml]
+.coherence-cache-config.xml
+----
+include::{include-source-code-samples-cachestore-resources}coherence-cache-config.xml[tag=scheme]
+----
+
+In the snippet above you can see the `<spring:bean>\{repository-bean}</spring:bean>` element used as the cache store.
+In this case we have not used the name of the repository bean directly, we have used a parameter named `repository-bean`
+(XML values in curly-brackets in the `<spring:bean>` element are treated as parameter macros). This allows us to map
+multiple caches to the same scheme each with a different cache store - this is quite a common approach in Coherence for
+a number of elements that may be configured in a scheme per-cache. We can now also add the cache mapping for our `people`
+cache that will use the scheme above.
+
+[source,xml]
+.coherence-cache-config.xml
+----
+include::{include-source-code-samples-cachestore-resources}coherence-cache-config.xml[tag=mapping]
+----
+
+In the mapping above, the cache name `people` maps to the scheme `db-scheme` that we created above.
+As we mentioned above, we need to pass the actual bean name in the `repository-bean` parameter, which we do by using the
+`<init-params>` element in the mapping. We set the `<param-value>` element to the bean name, in this case `personRepository`.
+
+[NOTE]
+====
+The bean name used here is `personRepository`. This is the default name generated by Spring for the `PersonRepository`
+class, which is the simple class name with the first letter lowercase. If we did not want to rely on Spring generating a
+bean name we could specify a name in the `@Repository` annotation on the `PersonRepository` class.
+====
+
+If we had another cache with a different cache store, for example if we had an entity called `Location` with a repository
+cache store class called `LocationRepository`, the bean name would default to `locationRepository`, and we could add the
+following mapping:
+
+[source,xml]
+----
+<cache-mapping>
+    <cache-name>locations</cache-name>
+    <scheme-name>db-scheme</scheme-name>
+    <init-params>
+        <init-param>
+            <param-name>repository-bean</param-name>
+            <param-value>locationRepository</param-value>
+        </init-param>
+    </init-params>
+</cache-mapping>
+----
+
+[[coherence-spring-cachestore-demo-running-embedded]]
+==== Running the Embedded Sample
+
+This sample is just a simple Spring Boot application that exposes two endpoints to create/update people and get people by id.
+The controller class for the two endpoints is very simple:
+
+[source,java]
+.PersonController.java
+----
+include::{include-source-code-samples-cachestore-app}controller/PersonController.java[tag=code]
+----
+
+We use the Coherence Spring integration to inject a `NamedMap` into the controller. This will be for the cache named `people`,
+which we configured to use the cache store in the configuration above.
+
+In the `createPerson` method we use the request parameters to create a `Person` and put it into the cache. The `CacheStore`
+will write this to the database.
+
+In the `getPerson` method we retrieve the `Person` from the cache using the id from the request path, loading from the
+database if there is no entry in the cache for the id.
+
+We can build the example using Maven from the root directory of Coherence Spring:
+[source,bash]
+----
+./mvnw clean package -pl samples/cachestore-demo
+----
+
+This will build a Spring Boot jar that we can run the normal Spring Boot ways, for example:
+[source,bash,subs="verbatim,quotes,attributes"]
+----
+java -jar samples/cachestore-demo/coherence-spring-cachestore-demo-app/target/coherence-spring-cachestore-demo-{coherence-spring-version}.jar
+----
+
+After the application has started we can try to get a `Person` using `curl`
+[source,bash]
+----
+curl -i -X GET http://localhost:8080/api/people/100
+----
+This should return a 404 response because there is no person in the database or cache with the id 100.
+
+We can create a `Person` using a `curl` POST request:
+[source,bash]
+----
+curl -i -X POST http://localhost:8080/api/people \
+    -d 'firstName=Joe' -d 'lastName=Smith' \
+    -d 'age=21' -d 'id=100'
+----
+This will create the `Person` named Joe Smith with the id 100. This should return with a 200 response to say the `Person`
+was successfully created and will be stored in the database.
+
+If we re-run the GET request we should get Joe Smith.
+[source,bash]
+----
+curl -i -X GET http://localhost:8080/api/people/100
+HTTP/1.1 200
+Content-Type: application/json
+Transfer-Encoding: chunked
+Date: Thu, 19 Aug 2021 16:13:47 GMT
+
+{"id":100,"age":21,"firstname":"Joe","lastname":"Smith"}%
+----
+
+[[coherence-spring-cachestore-demo-coherence-extend]]
+==== Using Coherence*Extend
+
+This is the slightly more complex version of the CacheStore demo. Instead of using an embedded version Coherence, we
+will have a remote Coherence instance and the actual application will connect to Coherence via Coherence*Extend.
+
+We can build the example using Maven from the root directory of Coherence Spring:
+
+[source,bash]
+----
+./mvnw clean install -pl :coherence-spring-cachestore-demo-server -am -DskipTests
+./mvnw clean install -pl :coherence-spring-cachestore-demo-app -am -DskipTests
+----
+
+We now have to start the Coherence Server as well as the Coherence Client App. We run both apps using Spring Boot. Let's
+start with the Coherence Server:
+
+[source,bash,subs="verbatim,quotes,attributes"]
+----
+java -jar samples/cachestore-demo/coherence-spring-cachestore-demo-server/target/coherence-spring-cachestore-demo-server-{coherence-spring-version}.jar
+----
+
+Next we start the client app. It is actually the same app as used in the embedded Coherence use-case. However, we will
+specify an additional Spring Boot profile, instructing the app to connect to the Coherence server in client mode via
+Coherence*Extend:
+
+[source,bash,subs="verbatim,quotes,attributes"]
+----
+java -jar samples/cachestore-demo/coherence-spring-cachestore-demo-app/target/coherence-spring-cachestore-demo-app-{coherence-spring-version}.jar \
+--spring.profiles.active=remote
+----
+
+By activating the `remote` Spring Boot profile, we will configure Coherence for client mode and we reference a different
+Cache Configuration XML file called `remote-cache-config.xml`.
+
+[[coherence-spring-cachestore-demo-inspect-database]]
+==== Inspecting the Database
+
+In the remote Coherence CacheStore demo, HSQL will be instantiated via the server module. This allow the app as well as
+the server to access the HSQL database instance. That way we can also inspect
+the data in the data more easily as we can inspect the database data via SQL tools
+such as the open-source https://dbeaver.io/[DBeaver].
+

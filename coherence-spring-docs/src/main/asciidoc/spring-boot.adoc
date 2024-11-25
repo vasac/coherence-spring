@@ -49,11 +49,19 @@ IMPORTANT: As Coherence Spring takes advantage of the new Coherence Bootstrap AP
 By adding the `coherence-spring-boot-starter` dependency, AutoConfiguration will be activated via the
 {coherence-spring-api}com/oracle/coherence/spring/boot/autoconfigure/CoherenceAutoConfiguration.html[CoherenceAutoConfiguration]
 class. This will also bind the {coherence-spring-api}com/oracle/coherence/spring/boot/autoconfigure/CoherenceProperties.html[CoherenceProperties]
-class for further configuration. The YAML configuration for Spring Boot's Coherence support may look like the following:
+class for further configuration.
+
+NOTE: By default, Coherence Spring will start Coherence in clustered mode (Server). If you want to use Coherence in
+client mode (Coherence*Extend or gRPC), please see the chapter on <<spring-boot-coherence-cluster-setup-client, setting
+up Spring Boot as a Coherence Client>>.
+
+Additional configuration can be provided for instance via Spring Boot's `application.yaml` or `application.properties` file.
+For instance YAML configuration for Spring Boot's Coherence support may look like the following:
 
 [source,yaml]
 ----
 coherence:
+  property-prefix: "coherence.properties."
   logging:
     destination: slf4j
     logger-name: MyCoherence
@@ -99,7 +107,7 @@ No messages are emitted if `-1` is specified. More log messages are emitted as t
 
 | coherence.sessions.<type>
 | N/A
-| Indicates the type of the session. One of the following: `grpc`, `server`, `client`
+| Indicates the type of the session. One of the following: `server`, `client` (For both Coherence*Extend and gRPC)
 
 | coherence.sessions.<type>[0].name
 |
@@ -117,15 +125,23 @@ No messages are emitted if `-1` is specified. More log messages are emitted as t
 |
 | The scope name for the session.
 
+| coherence.instance.type
+| Depends on session type. As soon as you specify a `server` session, it defaults to `cluster`
+| Type of the Coherence instance: `cluster` or `client`
+
+| coherence.server.startup-timeout
+| `5m`
+| Overrides the default startup-timeout when starting Coherence.
+
 |===
 
 `Session`-related configuration properties are defined based on the session type in:
 
 - {coherence-spring-api}com/oracle/coherence/spring/configuration/session/AbstractSessionConfigurationBean.html[AbstractSessionConfigurationBean]
 - {coherence-spring-api}com/oracle/coherence/spring/configuration/session/SessionConfigurationBean.html[SessionConfigurationBean]
-- {coherence-spring-api}com/oracle/coherence/spring/configuration/session/GrpcSessionConfigurationBean.html[GrpcSessionConfigurationBean]
+- {coherence-spring-api}com/oracle/coherence/spring/configuration/session/ClientSessionConfigurationBean.html[ClientSessionConfigurationBean]
 
-IMPORTANT: All but the `Session` properties are translated into native Coherence properties. If both
+IMPORTANT: Many properties are translated into native Coherence properties. If both
 Spring Boot property AND a native property `coherence.properties.*` are configured, the Spring Boot
 property is used.
 
@@ -133,8 +149,215 @@ If the provided Spring Boot configuration properties are not sufficient for your
 the native Coherence properties. For a list of available native properties, please consult the reference guide chapter on
 {oracle-coherence-docs}develop-applications/system-property-overrides.html#GUID-32230D28-4976-4147-A887-0A0120FF5C7E[System Property Overrides].
 
+[[spring-boot-coherence-cluster-setup]]
+== Coherence Cluster Setup
+
+In order to set up Coherence clusters with Spring Boot, you can use the following approaches:
+
+- Co-locate Coherence instances with your application
+- Access a dedicated Coherence Cluster as a Client, either via _gRPC_ or _Coherence*Extend_.
+
+TIP: For an in-depth introduction to Coherence clusters, please consult the chapter
+{oracle-coherence-docs}develop-applications/introduction-coherence-clusters.html#GUID-92569674-E077-46CE-BA06-1BA2DD59B605[Introduction to Coherence Clusters].
+
+[[spring-boot-coherence-cluster-setup-co-located]]
+=== Co-located Coherence Clusters
+
+In this setup, Coherence is started as part of your Spring Boot application. Each instance of your application will run
+Coherence and using the Tangosol Cluster Management Protocol (TCMP), they will form a Coherence cluster. This is typically
+the recommended approach for most use-cases and the default. Therefore, by just adding the `coherence-spring-boot-starter`
+Maven dependency, Spring Boot autoconfiguration for Coherence is enabled and will enable Coherence in Server (Clustered)
+mode.
+
+If you need to provide additional configuration, e.g. to point to your own Coherence cache configuration file or to
+provide Coherence {oracle-coherence-docs}develop-applications/system-property-overrides.html[System Property Overrides],
+you can add those to your `application.yaml` file:
+
+.Coherence Configuration Properties
+[source,yaml,indent=0,subs="verbatim,quotes,attributes"]
+----
+coherence:
+  sessions:
+    server:
+      - name: default
+        config: "coherence-cache-config.xml"  # <1>
+  logging:
+    destination: slf4j                        # <2>
+coherence.wka: 127.0.0.1                      # <3>
+----
+<1> The Coherence cache configuration URI for the session (classpath resource)
+<2> Several Oracle Coherence system property overrides are directly mapped to Spring Boot properties
+<3> Alternatively, you can specify _any_ Coherence system property override directly as well
+
+[[spring-boot-coherence-cluster-setup-client]]
+=== Access Coherence Clusters as a Client
+
+In this approach, your Spring Boot application will connect to a dedicated Coherence cluster as a client. This can be
+done either via _Coherence*Extend_ or https://grpc.io/[gRPC]. For your Spring Boot application, the configuration is
+basically the same for both approaches. In your Spring Boot `application.yaml` file, you will need to specify the following:
+
+.Coherence Client Configuration
+[source,yaml,indent=0,subs="verbatim,quotes,attributes"]
+----
+coherence:
+  spring:
+    - server:                           # <1>
+    - client:                           # <2>
+      - name: default
+        config: remote-cache-config.xml # <3>
+coherence.tcmp.enabled: false           # <4>
+----
+<1> Disable the server (clustered) session
+<2> Enable the client session
+<3> The Coherence cache configuration URI for the client session, which contains the gRPC or Coherence*Extend-specific configuration
+<4> Disable TCMP
+
+IMPORTANT: When setting up pure client connections to a Coherence cluster, you should ensure that TCMP is disabled. For
+more information, please see {oracle-coherence-docs}develop-remote-clients/configuring-extend-clients.html#GUID-F8832F4C-2F88-4DE4-A804-D100D47B552C[Disabling TCMP Communication]
+in the Coherence reference guide.
+
+[[spring-boot-coherence-cluster-setup-client-bean]]
+
+An alternative to the yaml or properties configuration above is to specify a dedicated `SessionConfigurationBean` in
+your Spring Boot application.
+
+.Configure the Coherence Client using a SessionConfigurationBean
+[source,java,indent=0,subs="verbatim,quotes,attributes"]
+----
+@Configuration
+public class CoherenceClientConfig {
+  @Bean
+  public SessionConfigurationBean grpcSessionConfigurationBean() {
+    final ClientSessionConfigurationBean sessionConfigurationBean = new ClientSessionConfigurationBean();
+    sessionConfigurationBean.setName(SessionConfigurationBean.DEFAULT_SESSION_NAME);
+    sessionConfigurationBean.setConfig("remote-cache-config.xml");
+    return sessionConfigurationBean;
+  }
+}
+----
+
+In the configuration above the `remote-cache-config.xml` file will contain the relevant Coherence configuration for
+either _Coherence*Extend_ or _gRPC_. The configuration for both approaches is described in the following sections.
+
+[[spring-boot-coherence-cluster-setup-client-grpc]]
+==== gRPC
+
+The main gRPC configuration is done in your `coherence-cache-config.xml` file. The configuration would look similar to the
+following:
+
+.Minimal gRPC Configuration
+[source,xml,indent=,subs="verbatim,quotes,attributes"]
+----
+<?xml version="1.0"?>
+<cache-config
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns="http://xmlns.oracle.com/coherence/coherence-cache-config"
+    xsi:schemaLocation="http://xmlns.oracle.com/coherence/coherence-cache-config coherence-cache-config.xsd">
+    <caching-scheme-mapping>
+        <cache-mapping>
+            <cache-name>*</cache-name>                   <!--1-->
+            <scheme-name>remote-grpc</scheme-name>       <!--2-->
+        </cache-mapping>
+    </caching-scheme-mapping>
+
+    <caching-schemes>
+        <remote-grpc-cache-scheme>                       <!--3-->
+            <scheme-name>remote-grpc</scheme-name>
+            <service-name>RemoteGrpcCache</service-name> <!--4-->
+            <cluster-name>Mycluster</cluster-name>
+        </remote-grpc-cache-scheme>
+    </caching-schemes>
+</cache-config>
+----
+<1> The cache name `*` is a wildcard and will match all caches
+<2> The scheme name `remote-grpc` is used to map the all caches to the scheme
+<3> The `remote-grpc` cache is defined in the `remote-grpc-cache-scheme` XML element
+<4> The reference to the gRPC service name
+
+TIP: For more information on gRPC, please consult the chapter on
+{oracle-coherence-docs}develop-remote-clients/getting-started-grpc.html[Getting Started with gRPC] in the Coherence
+reference guide.
+
+[[spring-boot-coherence-cluster-setup-client-extend]]
+==== Coherence*Extend
+
+The setup for Coherence*Extend is very similar to the gRPC setup. The main difference is that you will use the
+`remote-cache-scheme` XML element instead. The configuration would look similar to the following:
+
+.Minimal Coherence*Extend Configuration
+[source,xml,indent=,subs="verbatim,quotes,attributes"]
+----
+<?xml version="1.0"?>
+<cache-config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+              xmlns="http://xmlns.oracle.com/coherence/coherence-cache-config"
+              xsi:schemaLocation="http://xmlns.oracle.com/coherence/coherence-cache-config coherence-cache-config.xsd">
+
+    <caching-scheme-mapping>
+        <cache-mapping>
+            <cache-name>*</cache-name>                         <!--1-->
+            <scheme-name>remote</scheme-name>                  <!--2-->
+        </cache-mapping>
+    </caching-scheme-mapping>
+
+    <caching-schemes>
+        <remote-cache-scheme>                                  <!--3-->
+            <scheme-name>remote</scheme-name>
+            <service-name>ExtendTcpCacheService</service-name>
+        </remote-cache-scheme>
+    </caching-schemes>
+</cache-config>
+----
+<1> The cache name `*` is a wildcard and will match all caches
+<2> The scheme name `remote` is used to map the all caches to the scheme
+<3> The `remote` cache scheme is defined in the `remote-cache-scheme` XML element
+
+The configuration above will use the name service to discover the Coherence cluster and thus the exposed Coherence*Extend
+port. However, you can also specify the host and port explicitly. Here is an example of the configuration where the
+Coherence*Extend host and port are specified explicitly:
+
+.Coherence*Extend Configuration with explicit host/port configuration
+[source,xml,indent=,subs="verbatim,quotes,attributes"]
+----
+<?xml version="1.0"?>
+<cache-config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+              xmlns="http://xmlns.oracle.com/coherence/coherence-cache-config"
+              xsi:schemaLocation="http://xmlns.oracle.com/coherence/coherence-cache-config coherence-cache-config.xsd">
+
+    <caching-scheme-mapping>
+        <cache-mapping>
+            <cache-name>*</cache-name>
+            <scheme-name>remote</scheme-name>
+        </cache-mapping>
+    </caching-scheme-mapping>
+
+    <caching-schemes>
+        <remote-cache-scheme>
+            <scheme-name>remote</scheme-name>
+            <service-name>ExtendTcpCacheService</service-name>
+            <initiator-config>
+                <tcp-initiator>
+                    <name-service-addresses>
+                        <socket-address>
+                            <address>127.0.0.1</address>
+                            <port>7574</port>
+                        </socket-address>
+                    </name-service-addresses>
+                </tcp-initiator>
+                <outgoing-message-handler>
+                    <request-timeout>5s</request-timeout>
+                </outgoing-message-handler>
+            </initiator-config>
+        </remote-cache-scheme>
+    </caching-schemes>
+</cache-config>
+----
+
+TIP: For more information on Coherence*Extend, please consult the chapter on
+{oracle-coherence-docs}develop-remote-clients/getting-started-coherenceextend.html[Getting Started with Coherence*Extend
+] in the Coherence reference guide.
+
 [[spring-boot-config-data-api]]
-== Coherence Support of the Spring Boot ConfigData API
+== Support of the Spring Boot ConfigData API
 
 Since Spring Boot `2.4.x`, you can define your own
 https://spring.io/blog/2020/08/14/config-file-processing-in-spring-boot-2-4[custom config locations]. This allows you to
@@ -162,7 +385,7 @@ coherence:
     profile: kona
 ----
 
-Many properties have sensible default value. Please see class
+Many properties have sensible default values. Please see class
 {coherence-spring-api}com/oracle/coherence/spring/boot/config/CoherenceConfigClientProperties.html[CoherenceConfigClientProperties]
 for details.
 
@@ -195,16 +418,287 @@ following resources:
 - {spring-docs}html/integration.html#cache[The Cache Abstraction] chapter in the core Spring Framework reference guide
 ====
 
+[[spring-boot-caching-circuit-breaker]]
+=== Configure Circuit Breakers with Resilience4j
+
+Generally, it is recommended to configure and run Coherence as part of your application as a _cluster member_. However,
+caching can also be configured using Coherence in _client mode_ via Coherence*Extend or gRPC. However, in client mode
+you may encounter failures and/or reliability situations due to network issues resulting in cache failures. In those
+situations, it would be desirable to retrieve the data from the persistence store instead, until the connectivity
+is being restored. Similarly, your application may encounter request timeout issues when retrieving data from the cache.
+
+This is where the circuit breaker pattern can be quite helpful, allowing you to gracefully degrade functionality via
+configurable fallback methods. Spring Boot has excellent support via {resilience4j-website}[Resilience4j], a fault
+tolerance library.
+
+Coherence Spring includes an link:{git-sources-samples}circuit-breaker-cache-demo[example application] that illustrates
+a basic circuit breaker use-case via Resilience4j. In this example a Spring Boot-based application has REST endpoints
+to retrieve Books:
+
+- GET `/api/books` - Retrieve all books
+- GET `/api/books/1234` - Retrieve a single book
+- DELETE `/api/books/1234` - Evict a book from the Coherence cache
+
+By default, 2 books are inserted into the in-memory database AND into the Coherence cache. The application uses Spring's
+cache abstraction backed by Coherence. The application is configured to connect to Coherence on a separate node via
+Coherence*Extend. The use-case of the application is that when you shut down the Coherence server, the application won't
+be able to retrieve cached domain data from Coherence. Instead, the Resilience4j circuit breaker will catch the connection
+exception and invoke a fallback method. In this case the data is returned from the main persistence store, bi-passing
+the Spring cache until the connection to the Coherence server has been restored.
+
+[[spring-boot-caching-circuit-breaker-running-example]]
+==== Running the Example
+
+The example application consists of 2 applications:
+
+- *circuit-breaker-cache-demo-server* - The stand-alone Coherence instance
+- *circuit-breaker-cache-demo-app* - The client application that will connect to the Coherence server via Coherence*Extend
+
+Let's first run the server:
+
+[source,bash]
+----
+./mvnw spring-boot:run -pl samples/circuit-breaker-cache-demo/circuit-breaker-cache-demo-server
+----
+
+Now we need to run the actual application:
+
+[source,bash]
+----
+./mvnw spring-boot:run -pl samples/circuit-breaker-cache-demo/circuit-breaker-cache-demo-app
+----
+
+When the application starts, `2` books are added not only to the persistence store (HSQLDB) but also to the Coherence cache.
+However, this is not true for the retrieval of all books in this example.
+
+*Get all books*
+
+When you retrieve a list of all books. You will see that the main relevant business method is executed and the data retrieved
+from the database. But at this point the collection of books is added to the Coherence cache for the first time.
+
+.List all books
+[source,bash,indent=,subs="verbatim,quotes,attributes"]
+----
+curl -i \
+  -H "Accept: application/json" \
+  -H "Content-Type:application/json" \
+  -X GET "http://localhost:8090/api/books"
+----
+
+Thus, when you retrieve the list of books again, you will see in the logs:
+
+[source,bash]
+----
+No cache entry for key 'SimpleKey []' in cache(s) [allBooks]
+----
+
+*Get a Single Book*
+
+When retrieving a single book, on the other side, the book is retrieved from the Coherence cache right away.
+
+.Get a single book
+[source,bash,indent=,subs="verbatim,quotes,attributes"]
+----
+curl -i \
+  -H "Accept: application/json" \
+  -H "Content-Type:application/json" \
+  -X GET "http://localhost:8090/api/books/1"
+----
+
+You will see something like:
+
+[source,bash]
+----
+Cache entry for key '1' found in cache 'books'
+----
+
+Let's evict the book from the Coherence cache:
+
+.Evict book with id `1` from the Coherence Cache
+[source,bash,indent=,subs="verbatim,quotes,attributes"]
+----
+curl -i \
+  -H "Accept: application/json" \
+  -H "Content-Type:application/json" \
+  -X DELETE "http://localhost:8090/api/books/1"
+----
+
+Now, when you retrieve the book again, it will be retrieved from the persistence store instead. Let's do something more
+interesting. When retrieving a single book we added a special case to the business service, where the retrieval of a book
+with id `42` will cause a `BusinessException` to be thrown.
+
+.Get a single book throwing a business exception
+[source,bash,indent=,subs="verbatim,quotes,attributes"]
+----
+curl -i \
+  -H "Accept: application/json" \
+  -H "Content-Type:application/json" \
+  -X GET "http://localhost:8090/api/books/42"
+----
+
+As you may notice, an `Internal Server Error` (HTTP status 500) is returned to you. Additionally, a `BusinessException`
+was thrown and handled by a Resilience4j fallback method.
+
+[IMPORTANT]
+====
+Resilience4j selects fallback methods based on the specificity of the thrown Exceptions in relation to the exception
+declared in the fallback method. Thus, if you have multiple fallback methods, the method with the most specific exception
+is being chosen. Furthermore, it is important to know that expected exceptions (e.g. Business Exceptions) that you have
+included in the list of `ignoreExceptions` via `application.yaml`:
+
+- `resilience4j.circuitbreaker.configs.*.ignoreExceptions`
+
+will also trigger the execution of fallBack methods, but it will not change the state of the circuit breaker.
+====
+
+Next, we will first shut down the Coherence server, and then we try to retrieve a single book with id `1`:
+
+.Get a single book again
+[source,bash,indent=,subs="verbatim,quotes,attributes"]
+----
+curl -i \
+  -H "Accept: application/json" \
+  -H "Content-Type:application/json" \
+  -X GET "http://localhost:8090/api/books/1"
+----
+
+As you see, the JSON response is still the same (The book data is returned). However, when you look at the logs, you will see:
+
+[source,bash]
+----
+getBook fallback method (For Throwable) was called: Unable to locate ProxyService 'ExtendTcpCacheService' ...
+----
+
+So basically, the `CacheManager` was unable to connect to the Coherence instance and therefore the Circuit Breaker kicked
+in, calling the fallback method instead, and thus returning the Book not from the cache but from the persistence store.
+
+==== Monitoring the Circuit Breaker
+
+Spring Boot and Resilience4j also provide facilities to monitor the state of the Circuit Breaker via Spring Boot's
+health-endpoint as well as its circuit breaker events endpoint:
+
+- http://localhost:8090/actuator/health
+- http://localhost:8090/actuator/circuitbreakerevents/coherence
+
+.Spring Boot Health Endpoint
+[source,json]
+----
+{
+  "status":"UP",
+  "components":{
+    "circuitBreakers":{
+      "status":"UNKNOWN",
+      "details":{
+        "coherence":{
+          "status":"CIRCUIT_OPEN",
+          "details":{
+            "failureRate":"100.0%",
+            "failureRateThreshold":"5.0%",
+            "slowCallRate":"0.0%",
+            "slowCallRateThreshold":"100.0%",
+            "bufferedCalls":3,
+            "slowCalls":0,
+            "slowFailedCalls":0,
+            "failedCalls":3,
+            "notPermittedCalls":8,
+            "state":"OPEN"
+          }
+        }
+      }
+    },
+    "db":{
+      "status":"UP",
+      "details":{
+        "database":"HSQL Database Engine",
+        "validationQuery":"isValid()"
+      }
+    },
+    "diskSpace":{
+      "status":"UP",
+      "details":{
+        "total":2000796545024,
+        "free":1490744430592,
+        "threshold":10485760,
+        "exists":true
+      }
+    },
+    "ping":{
+      "status":"UP"
+    }
+  }
+}
+----
+
+[IMPORTANT]
+====
+For demonstrating purposes we enabled the relevant health endpoints via Spring Boot configuration in `application.yaml`:
+
+[source,yaml]
+----
+management.endpoints.web.exposure.include: "*"
+management.endpoint.health.show-details: always
+----
+
+You may not want to do this in production. This is solely for demonstration purposes, especially as no security is configured
+for this application.
+====
+
+==== Add Resilience4j Dependencies
+
+In order to use Resilience4j in your Coherence Spring project with Spring Boot, you need to add the following dependencies:
+
+.Resilience4j Spring Boot Dependency
+====
+.Maven
+[source,xml,role="primary",subs="verbatim,quotes,attributes"]
+----
+<dependency>
+    <groupId>io.github.resilience4j</groupId>
+    <artifactId>resilience4j-spring-boot3</artifactId>
+    <version>{resilience4j-version}</version>
+</dependency>
+----
+
+.Gradle
+[source,groovy,role="secondary",subs="verbatim,quotes,attributes"]
+----
+implementation("io.github.resilience4j:resilience4j-spring-boot3:{resilience4j-version}")
+----
+====
+
+==== Resilience4j Annotations
+
+In order to add circuit-breaker capabilities to our `@Cacheable` business methods in `DefaultBookService`, we simply add
+the `@CircuitBreaker` annotations, e.g.:
+
+[source,java]
+----
+@Cacheable("allBooks")
+@CircuitBreaker(name = "coherence", fallbackMethod = "getAllBooksFallback")
+@Override
+public List<Book> getAllBooks() {
+ ...
+}
+----
+
+The key is the specified fallback method: whenever an exception occurs, the fallback method is being executed. You can have
+multiple fallback methods, specifying different exception types. Resilience4j will then select the fallback methods based
+on the specificity of the thrown exception.
+
+[TIP]
+====
+When dealing with fallback method, it may at times be necessary to call other methods of the same services that you expect
+to be proxied, e.g. have applied annotations etc. However, when calling other methods in the same service, you are calling
+those methods without the relevant AOP aspects applied to them. You may either need to refactor those methods into another
+Spring bean or can actually inject the same service into the service. This type of injection call self injection or self
+autowiring has https://stackoverflow.com/questions/5152686/self-injection-with-spring[been supported] since Spring `4.3`.
+====
+
 [[spring-boot-hibernate-second-level-cache]]
 == Configure Hibernate Second-Level Caching
 
 Spring's cache abstraction is not your only option with regard to caching. Another option is to use Hibernate's
 {hibernate-docs}#caching[Second-Level cache] support.
-
-IMPORTANT: Currently, Coherence only supports Hibernate up to `5.2.x`, as the Hibernate Cache SPI
-https://github.com/hibernate/hibernate-orm/blob/5.3/migration-guide.adoc#second-level-cache-provider-spi-changes[changed]
-with Hibernate `5.3.x` and higher. Please track the relevant https://github.com/coherence-community/coherence-hibernate/issues/13[GitHub issue] for
-the Coherence Hibernate project.
 
 When using only Hibernate's second-level cache without the requirement of using Coherence for non-Hibernate application
 needs, you may want to disable Coherence's auto-configuration support for Spring
@@ -252,7 +746,7 @@ documentation.
 === Hibernate Second Level Cache Example
 
 The Coherence Spring source code repository also provides an
-{coherence-spring-code}tree/master/samples/hibernate-cache-demo[example application], illustrating the Coherence support for
+{coherence-spring-code}tree/main/samples/hibernate-cache-demo[example application], illustrating the Coherence support for
 Hibernate's Second Level caching using https://spring.io/projects/spring-boot[Spring Boot].
 
 The example application has 1 REST endpoint that can persist, retrieve and delete a `Plant` object with taxonomic properties
@@ -367,11 +861,53 @@ curl -i \
 [[spring-boot-sessions]]
 == Spring Session Support
 
-If you have not already done so, please read the chapter on
-<<spring-session.adoc#spring-session, Coherence Spring Session>> first.
-
 Coherence Spring also provides support for Spring Session. This includes auto-configuration support as well as a set of
-Coherence-specific configuration properties.
+Coherence-specific configuration properties. Before you continue, please consider reading the chapter
+on <<spring-session.adoc#spring-session, Coherence Spring Session>> first.
+
+In order to activate Spring Session support for Spring Boot, you must have the following dependencies added to your
+project:
+
+.Add Coherence Spring Session Support
+====
+.Maven
+[source,xml,indent=0,subs="verbatim,quotes,attributes",role="primary"]
+----
+<dependencies>
+    <dependency>
+        <groupId>com.oracle.coherence.spring</groupId>
+        <artifactId>coherence-spring-boot-starter</artifactId>
+        <version>{coherence-spring-version}</version>
+    </dependency>
+    <dependency>
+        <groupId>com.oracle.coherence.spring</groupId>
+        <artifactId>coherence-spring-session</artifactId>
+        <version>{coherence-spring-version}</version>
+    </dependency>
+    <dependency>
+        <groupId>com.oracle.coherence.ce</groupId>
+        <artifactId>coherence</artifactId>
+        <version>{coherence-version}</version>
+    </dependency>
+</dependencies>
+----
+
+.Gradle
+[source,groovy,indent=0,subs="verbatim,quotes,attributes",role="secondary"]
+----
+dependencies {
+    compile("com.oracle.coherence.spring:coherence-spring-boot-starter:{coherence-spring-version}")
+    compile("com.oracle.coherence.spring:coherence-spring-session:{coherence-spring-version}")
+    compile("com.oracle.coherence.ce:coherence:{coherence-version}")
+}
+----
+====
+
+Basically, adding the `coherence-spring-session` dependency will activate the `CoherenceSpringSessionAutoConfiguration`
+class. Auto-configuration will back-off in certain situations:
+
+- Set property `coherence.spring.session.enabled` to `false`
+- Define `spring.session.store-type`. Any value will deactivate auto-configuration.
 
 The following Coherence-specific configuration properties are available:
 
@@ -395,6 +931,10 @@ The following Coherence-specific configuration properties are available:
 | `ON_SET_ATTRIBUTE`
 | The session save mode determines how session changes are tracked and saved to the session store.
 
+| coherence.spring.session.use-entry-processor
+| `true`
+| If true, a Coherence Entry Processor will be used for handling updates to the persisted HTTP session.
+
 |===
 
 [[spring-boot-messaging]]
@@ -404,7 +944,7 @@ Support for injecting Coherence Publishers is enabled automatically by adding th
 By default, base package to scan for link:{coherence-spring-api}com/oracle/coherence/spring/annotation/CoherencePublisher.html[@CoherencePublisher]
 annotated interfaces is derived from the main class annotated with `@SpringBootApplication`. Base package can be overridden
 by annotating configuration class with link:{coherence-spring-api}com/oracle/coherence/spring/annotation/CoherencePublisherScan.html[@CoherencePublisherScan]
-as described at <<coherence-spring-messaging-with-coherence-topics, Messaging with Coherence Topics>>.
+as described at xref:core.adoc#coherence-spring-messaging-with-coherence-topics[Messaging with Coherence Topics].
 
 [[spring-boot-metrics]]
 == Coherence Metrics
@@ -421,3 +961,51 @@ management:
     enable:
       coherence: false
 ----
+
+[[spring-boot-data]]
+== Spring Data Support
+
+Coherence Spring's support for Spring Data also contain auto-configuration support for Spring Boot. The auto-configuration
+is activated as soon as the Coherence Spring Data dependency is added to your Spring Boot project.
+
+.Add Coherence Spring Data Support
+====
+.Maven
+[source,xml,indent=0,subs="verbatim,quotes,attributes",role="primary"]
+----
+<dependencies>
+    <dependency>
+        <groupId>com.oracle.coherence.spring</groupId>
+        <artifactId>coherence-spring-boot-starter</artifactId>
+        <version>{coherence-spring-version}</version>
+    </dependency>
+    <dependency>
+        <groupId>com.oracle.coherence.spring</groupId>
+        <artifactId>coherence-spring-data</artifactId>
+        <version>{coherence-spring-version}</version>
+    </dependency>
+    <dependency>
+        <groupId>com.oracle.coherence.ce</groupId>
+        <artifactId>coherence</artifactId>
+        <version>{coherence-version}</version>
+    </dependency>
+</dependencies>
+----
+
+.Gradle
+[source,groovy,indent=0,subs="verbatim,quotes,attributes",role="secondary"]
+----
+dependencies {
+    compile("com.oracle.coherence.spring:coherence-spring-boot-starter:{coherence-spring-version}")
+    compile("com.oracle.coherence.spring:coherence-spring-data:{coherence-spring-version}")
+    compile("com.oracle.coherence.ce:coherence:{coherence-version}")
+}
+----
+====
+
+There is no need to add the `@EnableCoherenceRepositories` annotation, as the Coherence Spring Data auto-configuration
+support, will automatically detect any Coherence repositories. In fact, adding `@EnableCoherenceRepositories` to your
+Spring Boot project, will cause auto-configuration to back-off.
+
+Auto-configuration can also be de-activated by setting environment property `coherence.spring.data.repositories.enabled`
+to `false`.

@@ -1,5 +1,5 @@
 /*
- * Copyright 2017-2021 original authors
+ * Copyright 2017-2023 original authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,10 +15,10 @@
  */
 package com.oracle.coherence.spring.boot.config;
 
-import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.stream.Collectors;
 
-import com.tangosol.net.NamedMap;
 import com.tangosol.net.Session;
 
 import org.springframework.boot.context.config.ConfigData;
@@ -41,19 +41,19 @@ public class CoherenceConfigDataLoader implements ConfigDataLoader<CoherenceConf
 	}
 
 	public List<PropertySource<?>> getPropertySources(CoherenceConfigDataResource resource) {
-
-		final CoherenceGrpcClient coherenceGrpcClient = new CoherenceGrpcClient(resource.getProperties());
-
-		final List<String> keys = this.buildSourceNames(resource);
-
-		final List<PropertySource<?>> composite = new ArrayList<>();
-		final Session session = coherenceGrpcClient.getCoherenceSession();
-		for (String propertySourceName : keys) {
-			final NamedMap<String, Object> configMap = session.getMap(propertySourceName);
-			final MapPropertySource propertySource = new MapPropertySource(propertySourceName, configMap);
-			composite.add(propertySource);
+		try (CoherenceGrpcClient coherenceGrpcClient = new CoherenceGrpcClient(resource.getProperties())) {
+			final List<String> keys = this.buildSourceNames(resource);
+			final Session session = coherenceGrpcClient.getCoherenceSession();
+			return keys.stream()
+					.map((propertySourceName) ->
+								new MapPropertySource(
+										propertySourceName,
+										new HashMap<>(session.getMap(propertySourceName))))
+					.collect(Collectors.toList());
 		}
-		return composite;
+		catch (Exception ex) {
+			throw new RuntimeException(ex);
+		}
 	}
 
 	/**
@@ -63,14 +63,12 @@ public class CoherenceConfigDataLoader implements ConfigDataLoader<CoherenceConf
 	 */
 	protected List<String> buildSourceNames(CoherenceConfigDataResource coherenceConfigDataResource) {
 		Assert.notNull(coherenceConfigDataResource, "coherenceConfigDataResource must not be null.");
+
 		final String configuredApplicationName = coherenceConfigDataResource.getProperties().getApplicationName();
 		final List<String> profiles = coherenceConfigDataResource.getProfilesAsList();
 
-		final List<String> configKeys = new ArrayList<>();
-
-		for (String profileName : profiles) {
-			configKeys.add(configuredApplicationName + "-" + profileName);
-		}
-		return configKeys;
+		return profiles.stream()
+				.map((profileName) -> configuredApplicationName + '-' + profileName)
+				.collect(Collectors.toList());
 	}
 }

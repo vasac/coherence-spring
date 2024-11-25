@@ -1,5 +1,10 @@
-sessions:
-  client:
-    - name: default
-logback-test:
-  xml:
+coherence:
+  sessions:
+    server: # disable the server session
+    client:
+      - name: default
+        config: remote-cache-config.xml
+#  spring:
+#    session:
+#      use-entry-processor: false
+coherence.tcmp.enabled: false

@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 
 <!--
-  Copyright (c) 2021, Oracle and/or its affiliates.
+  Copyright (c) 2022, 2023, Oracle and/or its affiliates.
   Licensed under the Universal Permissive License v 1.0 as shown at
   https://oss.oracle.com/licenses/upl.
 -->
@@ -12,7 +12,7 @@
 	<parent>
 		<groupId>com.oracle.coherence.spring</groupId>
 		<artifactId>coherence-spring-parent</artifactId>
-		<version>3.0.0-SNAPSHOT</version>
+		<version>4.2.1-SNAPSHOT</version>
 	</parent>
 
 	<artifactId>coherence-spring-site</artifactId>
@@ -24,20 +24,20 @@
 
 	<properties>
 		<coherence.spring.root>${basedir}/..</coherence.spring.root>
-		<helidon.sitegen.version>2.0.0-RC1</helidon.sitegen.version>
-		<asciidoctor.diagram.version>2.0.2</asciidoctor.diagram.version>
-		<doxia.version>1.6</doxia.version>
+		<helidon.sitegen.version>3.0.5</helidon.sitegen.version>
+		<asciidoctor.diagram.version>2.3.1</asciidoctor.diagram.version>
+		<doxia.version>1.11.1</doxia.version>
 
 		<timestamp>${maven.build.timestamp}</timestamp>
 		<maven.build.timestamp.format>yyyy-MM-dd HH:mm</maven.build.timestamp.format>
-		<maven-dependency-plugin.version>3.1.2</maven-dependency-plugin.version>
+		<maven-dependency-plugin.version>3.8.0</maven-dependency-plugin.version>
 	</properties>
 
 	<dependencies>
 		<dependency>
 			<groupId>com.oracle.coherence.spring</groupId>
 			<artifactId>coherence-spring-docs</artifactId>
-			<version>3.0.0-SNAPSHOT</version>
+			<version>4.2.1-SNAPSHOT</version>
 			<type>zip</type>
 		</dependency>
 	</dependencies>
@@ -94,7 +94,7 @@
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-project-info-reports-plugin</artifactId>
-				<version>3.0.0</version>
+				<version>3.6.2</version>
 			</plugin>
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
@@ -105,7 +105,7 @@
 					<skipDeploy>true</skipDeploy>
 					<skip>false</skip>
 					<siteDirectory>docs</siteDirectory>
-					<stagingDirectory>${build.directory}/staging</stagingDirectory>
+					<stagingDirectory>${project.build.directory}/staging</stagingDirectory>
 				</configuration>
 				<executions>
 					<execution>
@@ -199,7 +199,7 @@
 					<plugin>
 						<groupId>org.apache.maven.plugins</groupId>
 						<artifactId>maven-scm-publish-plugin</artifactId>
-						<version>3.1.0</version>
+						<version>3.3.0</version>
 						<configuration>
 							<serverId>github-pages</serverId>
 							<checkinComment>${project.version} Site</checkinComment>

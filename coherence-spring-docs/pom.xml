@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
 <!--
-  Copyright (c) 2013, 2021, Oracle and/or its affiliates.
+  Copyright (c) 2013, 2024, Oracle and/or its affiliates.
   Licensed under the Universal Permissive License v 1.0 as shown at
   https://oss.oracle.com/licenses/upl.
 -->
@@ -13,7 +13,7 @@
 	<parent>
 		<groupId>com.oracle.coherence.spring</groupId>
 		<artifactId>coherence-spring-parent</artifactId>
-		<version>3.0.0-SNAPSHOT</version>
+		<version>4.2.1-SNAPSHOT</version>
 	</parent>
 
 	<artifactId>coherence-spring-docs</artifactId>
@@ -23,42 +23,43 @@
 
 	<properties>
 		<refdocs.build.directory>${project.build.directory}/refdocs/</refdocs.build.directory>
+		<coherence.spring.root>${basedir}/..</coherence.spring.root>
 	</properties>
 
 	<dependencies>
 		<dependency>
 			<groupId>com.oracle.coherence.spring</groupId>
 			<artifactId>coherence-spring-core</artifactId>
-			<version>3.0.0-SNAPSHOT</version>
+			<version>4.2.1-SNAPSHOT</version>
 		</dependency>
 
 		<dependency>
 			<groupId>com.oracle.coherence.spring</groupId>
 			<artifactId>coherence-spring-data</artifactId>
-			<version>3.0.0-SNAPSHOT</version>
+			<version>4.2.1-SNAPSHOT</version>
 		</dependency>
 
 		<dependency>
 			<groupId>com.oracle.coherence.spring</groupId>
 			<artifactId>coherence-spring-boot-starter</artifactId>
-			<version>3.0.0-SNAPSHOT</version>
+			<version>4.2.1-SNAPSHOT</version>
 		</dependency>
 
 		<dependency>
 			<groupId>com.oracle.coherence.spring</groupId>
 			<artifactId>coherence-spring-session</artifactId>
-			<version>3.0.0-SNAPSHOT</version>
+			<version>4.2.1-SNAPSHOT</version>
 		</dependency>
 
 		<dependency>
-			<groupId>com.oracle.coherence.ce</groupId>
+			<groupId>${coherence.groupId}</groupId>
 			<artifactId>coherence-java-client</artifactId>
 			<version>${coherence.version}</version>
 			<scope>provided</scope>
 		</dependency>
 
 		<dependency>
-			<groupId>com.oracle.coherence.ce</groupId>
+			<groupId>${coherence.groupId}</groupId>
 			<artifactId>coherence</artifactId>
 			<version>${coherence.version}</version>
 			<scope>provided</scope>
@@ -75,6 +76,12 @@
 			<groupId>org.springframework</groupId>
 			<artifactId>spring-context</artifactId>
 			<version>${org.springframework.version}</version>
+			<scope>provided</scope>
+		</dependency>
+
+		<dependency>
+			<groupId>org.springframework.data</groupId>
+			<artifactId>spring-data-jpa</artifactId>
 			<scope>provided</scope>
 		</dependency>
 
@@ -119,9 +126,9 @@
 		</dependency>
 
 		<dependency>
-			<groupId>javax</groupId>
-			<artifactId>javaee-api</artifactId>
-			<version>${javaee-api.version}</version>
+			<groupId>jakarta.platform</groupId>
+			<artifactId>jakarta.jakartaee-api</artifactId>
+			<version>${jakartaee-api.version}</version>
 			<scope>provided</scope>
 		</dependency>
 
@@ -133,7 +140,7 @@
 		</dependency>
 
 		<dependency>
-			<groupId>com.oracle.coherence.ce</groupId>
+			<groupId>${coherence.groupId}</groupId>
 			<artifactId>coherence-micrometer</artifactId>
 			<version>${coherence.version}</version>
 			<scope>provided</scope>
@@ -144,7 +151,8 @@
 			<artifactId>spring-doc-resources</artifactId>
 			<version>${spring-doc-resources.version}</version>
 			<type>zip</type>
-			<optional>true</optional>
+			<scope>system</scope>
+			<systemPath>${coherence.spring.root}/lib/spring-doc-resources-${spring-doc-resources.version}.zip</systemPath>
 		</dependency>
 	</dependencies>
 
@@ -161,7 +169,7 @@
 						</goals>
 						<phase>prepare-package</phase>
 						<configuration>
-							<source>8</source>
+							<source>${java.version}</source>
 							<includeDependencySources>true</includeDependencySources>
 							<dependencySourceIncludes>
 								<dependencySourceInclude>${project.groupId}:*</dependencySourceInclude>
@@ -169,13 +177,13 @@
 							<sourceFileExcludes>com/oracle/coherence/spring/docs/**/*.java</sourceFileExcludes>
 							<attach>false</attach>
 							<quiet>true</quiet>
-							<stylesheetfile>${basedir}/src/main/javadoc/spring-javadoc.css</stylesheetfile>
 							<links>
-								<link>https://docs.oracle.com/javase/8/docs/api/</link>
-								<link>https://docs.oracle.com/javaee/7/api/</link>
+								<link>https://docs.oracle.com/javase/17/docs/api/</link>
 								<link>https://docs.spring.io/spring-framework/docs/${org.springframework.version}/javadoc-api/</link>
 							</links>
-							<additionalJOption>--no-module-directories</additionalJOption>
+							<bottom>
+								Copyright © 2013, 2024, Oracle and/or its affiliates. Licensed under the Universal Permissive License v 1.0.
+							</bottom>
 						</configuration>
 					</execution>
 				</executions>
@@ -203,7 +211,6 @@
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-resources-plugin</artifactId>
-				<version>3.2.0</version>
 				<executions>
 					<execution>
 						<id>copy-asciidoc-resources</id>
@@ -238,8 +245,11 @@
 					</resources>
 					<attributes>
 						<coherence-spring-version>${project.version}</coherence-spring-version>
+						<resilience4j-version>${resilience4j.version}</resilience4j-version>
 						<coherence-version>${coherence.version}</coherence-version>
 						<sources-root>${project.basedir}/src</sources-root>
+						<sources-root-samples>${coherence.spring.root}/samples/</sources-root-samples>
+						<tomcat-version>${tomcat.version}</tomcat-version>
 					</attributes>
 				</configuration>
 				<dependencies>
@@ -247,11 +257,15 @@
 						<groupId>io.spring.asciidoctor</groupId>
 						<artifactId>spring-asciidoctor-extensions-block-switch</artifactId>
 						<version>${spring-asciidoctor-extensions.version}</version>
+						<scope>system</scope>
+						<systemPath>${coherence.spring.root}/lib/spring-asciidoctor-extensions-block-switch-0.5.0.jar</systemPath>
 					</dependency>
 					<dependency>
 						<groupId>io.spring.asciidoctor</groupId>
 						<artifactId>spring-asciidoctor-extensions-spring-boot</artifactId>
 						<version>${spring-asciidoctor-extensions.version}</version>
+						<scope>system</scope>
+						<systemPath>${coherence.spring.root}/lib/spring-asciidoctor-extensions-spring-boot-0.5.0.jar</systemPath>
 					</dependency>
 				</dependencies>
 				<executions>
@@ -264,11 +278,10 @@
 						<configuration>
 							<backend>html5</backend>
 							<sourceDocumentExtensions>
-								<sourceDocumentExtension>.adoc</sourceDocumentExtension>
-								<sourceDocumentExtension>.htmladoc</sourceDocumentExtension>
+								<sourceDocumentExtension>adoc</sourceDocumentExtension>
+								<sourceDocumentExtension>htmladoc</sourceDocumentExtension>
 							</sourceDocumentExtensions>
 							<outputDirectory>${project.build.directory}/generated-docs/reference/html</outputDirectory>
-							<sourceHighlighter>highlight.js</sourceHighlighter>
 							<doctype>book</doctype>
 							<attributes>
 								<highlightjsdir>js/highlight</highlightjsdir>
@@ -276,6 +289,7 @@
 								<linkcss>true</linkcss>
 								<imagesdir>./images</imagesdir>
 								<icons>font</icons>
+								<source-highlighter>highlight.js</source-highlighter>
 								<stylesdir>css/</stylesdir>
 								<stylesheet>spring.css</stylesheet>
 								<attribute-missing>warn</attribute-missing>
@@ -297,10 +311,9 @@
 						<configuration>
 							<backend>html5</backend>
 							<sourceDocumentExtensions>
-								<sourceDocumentExtension>.htmlsingleadoc</sourceDocumentExtension>
+								<sourceDocumentExtension>htmlsingleadoc</sourceDocumentExtension>
 							</sourceDocumentExtensions>
 							<outputDirectory>${project.build.directory}/generated-docs/reference/htmlsingle</outputDirectory>
-							<sourceHighlighter>highlight.js</sourceHighlighter>
 							<doctype>book</doctype>
 							<attributes>
 								<highlightjsdir>js/highlight</highlightjsdir>
@@ -308,6 +321,7 @@
 								<linkcss>true</linkcss>
 								<imagesdir>./images</imagesdir>
 								<icons>font</icons>
+								<source-highlighter>highlight.js</source-highlighter>
 								<stylesdir>css/</stylesdir>
 								<stylesheet>spring.css</stylesheet>
 							</attributes>
@@ -331,6 +345,10 @@
 								<sourceDocumentExtension>pdfadoc</sourceDocumentExtension>
 							</sourceDocumentExtensions>
 							<outputDirectory>${project.build.directory}/generated-docs/reference/pdf</outputDirectory>
+							<attributes>
+								<imagesdir>./images</imagesdir>
+								<source-highlighter>coderay</source-highlighter>
+							</attributes>
 							<resources>
 								<resource>
 									<directory>${refdocs.build.directory}</directory>
@@ -346,7 +364,7 @@
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-antrun-plugin</artifactId>
-				<version>1.8</version>
+				<version>${maven-antrun-plugin.version}</version>
 				<dependencies>
 					<dependency>
 						<groupId>ant-contrib</groupId>
@@ -416,7 +434,7 @@
 			<plugin>
 				<groupId>org.codehaus.mojo</groupId>
 				<artifactId>build-helper-maven-plugin</artifactId>
-				<version>3.2.0</version>
+				<version>${build-helper-maven-plugin.version}</version>
 				<executions>
 					<execution>
 						<id>attach-zip</id>
@@ -431,6 +449,20 @@
 								</artifact>
 							</artifacts>
 						</configuration>
+					</execution>
+				</executions>
+			</plugin>
+			<plugin>
+				<groupId>org.jacoco</groupId>
+				<artifactId>jacoco-maven-plugin</artifactId>
+				<version>${maven-jacoco-plugin.version}</version>
+				<executions>
+					<execution>
+						<id>report-aggregate</id>
+						<phase>verify</phase>
+						<goals>
+							<goal>report-aggregate</goal>
+						</goals>
 					</execution>
 				</executions>
 			</plugin>

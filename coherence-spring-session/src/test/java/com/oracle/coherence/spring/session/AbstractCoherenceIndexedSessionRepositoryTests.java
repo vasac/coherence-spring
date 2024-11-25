@@ -1,19 +1,25 @@
 /*
- * Copyright (c) 2021, Oracle and/or its affiliates.
+ * Copyright (c) 2021, 2023, Oracle and/or its affiliates.
  *
  * Licensed under the Universal Permissive License v 1.0 as shown at
  * https://oss.oracle.com/licenses/upl.
  */
 package com.oracle.coherence.spring.session;
 
+import java.time.Duration;
 import java.util.Map;
 
+import com.oracle.coherence.spring.session.support.MyHttpSessionListener;
+import com.oracle.coherence.spring.session.support.SessionEventApplicationListener;
 import com.tangosol.net.Coherence;
 import com.tangosol.net.Session;
 import com.tangosol.net.cache.CacheMap;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.authority.AuthorityUtils;
@@ -22,6 +28,8 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.session.FindByIndexNameSessionRepository;
 import org.springframework.session.FlushMode;
 import org.springframework.session.MapSession;
+import org.springframework.session.events.SessionCreatedEvent;
+import org.springframework.session.events.SessionDeletedEvent;
 import org.springframework.util.StringUtils;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -42,13 +50,42 @@ abstract class AbstractCoherenceIndexedSessionRepositoryTests {
 
 	protected String expectedCacheName;
 
+	protected boolean expectedToUseEntryProcessor = true;
+
 	@Autowired
 	private Coherence coherenceInstance;
 
 	@Autowired
 	private CoherenceIndexedSessionRepository repository;
 
+	@Autowired
+	private SessionEventApplicationListener sessionEventRegistry;
+
+	@Autowired
+	private MyHttpSessionListener myHttpSessionListener;
+
 	protected String sessionName;
+
+	AbstractCoherenceIndexedSessionRepositoryTests() {
+		String name = getLocalClusterName();
+		if (name != null) {
+			System.setProperty("coherence.cluster", getLocalClusterName());
+		}
+	}
+
+	protected String getLocalClusterName() {
+		return null;
+	}
+
+	@AfterEach
+	void tearDown() {
+		this.myHttpSessionListener.reset();
+	}
+
+	@Test
+	void verifyCoherenceIndexedSessionRepositoryProperties() {
+		assertThat(this.repository.isUseEntryProcessor()).isEqualTo(this.expectedToUseEntryProcessor);
+	}
 
 	@Test
 	void createAndDestroyCoherenceSession() {
@@ -63,9 +100,26 @@ abstract class AbstractCoherenceIndexedSessionRepositoryTests {
 
 		assertThat(cacheMap.get(sessionId)).isEqualTo(sessionToSave.getDelegate());
 
+		assertThat(this.sessionEventRegistry.receivedEvent(sessionId)).isTrue();
+		assertThat(this.sessionEventRegistry.<SessionCreatedEvent>getEvent(sessionId))
+				.isInstanceOf(SessionCreatedEvent.class);
+		this.sessionEventRegistry.clearSessionEvents();
+
+		assertThat(this.myHttpSessionListener.getSessionsCreatedCount()).isEqualTo(1);
+		assertThat(this.myHttpSessionListener.getSessionsDestroyedCount()).isEqualTo(0);
+
 		this.repository.deleteById(sessionId);
 
 		assertThat(cacheMap.get(sessionId)).isNull();
+
+		this.sessionEventRegistry.getEvent(sessionId);
+
+		assertThat(this.sessionEventRegistry.receivedEvent(sessionId)).isTrue();
+		assertThat(this.sessionEventRegistry.<SessionDeletedEvent>getEvent(sessionId))
+				.isInstanceOf(SessionDeletedEvent.class);
+
+		assertThat(this.myHttpSessionListener.getSessionsCreatedCount()).isEqualTo(1);
+		assertThat(this.myHttpSessionListener.getSessionsDestroyedCount()).isEqualTo(1);
 	}
 
 	@Test
@@ -261,6 +315,62 @@ abstract class AbstractCoherenceIndexedSessionRepositoryTests {
 	}
 
 	@Test
+	void resetMaxInactiveIntervalForActiveSessions() {
+		this.repository.setDefaultMaxInactiveInterval(Duration.ofSeconds(100));
+
+		final CoherenceSpringSession session1 = this.repository.createSession();
+		final String sessionId1 = session1.getId();
+		this.repository.save(session1);
+
+		this.repository.setDefaultMaxInactiveInterval(Duration.ofSeconds(200));
+
+		final CoherenceSpringSession session2 = this.repository.createSession();
+		final String sessionId2 = session2.getId();
+		this.repository.save(session2);
+
+		final CoherenceSpringSession sessionFromRepository1 = this.repository.findById(sessionId1);
+		final CoherenceSpringSession sessionFromRepository2 = this.repository.findById(sessionId2);
+
+		assertThat(sessionFromRepository1).isNotNull();
+		assertThat(sessionFromRepository2).isNotNull();
+
+		assertThat(sessionFromRepository1.getMaxInactiveInterval()).isEqualTo(Duration.ofSeconds(100));
+		assertThat(sessionFromRepository2.getMaxInactiveInterval()).isEqualTo(Duration.ofSeconds(200));
+
+		this.repository.setDefaultMaxInactiveInterval(Duration.ofSeconds(50));
+		this.repository.resetMaxInactiveIntervalForActiveSessions();
+
+		assertThat(this.repository.findById(sessionId1).getMaxInactiveInterval()).isEqualTo(Duration.ofSeconds(50));
+		assertThat(this.repository.findById(sessionId2).getMaxInactiveInterval()).isEqualTo(Duration.ofSeconds(50));
+	}
+
+	@Test
+	void clearAllSessions() {
+		this.repository.setDefaultMaxInactiveInterval(Duration.ofSeconds(100));
+
+		final CoherenceSpringSession session1 = this.repository.createSession();
+		final String sessionId1 = session1.getId();
+		this.repository.save(session1);
+
+		this.repository.setDefaultMaxInactiveInterval(Duration.ofSeconds(200));
+
+		final CoherenceSpringSession session2 = this.repository.createSession();
+		final String sessionId2 = session2.getId();
+		this.repository.save(session2);
+
+		final CoherenceSpringSession sessionFromRepository1 = this.repository.findById(sessionId1);
+		final CoherenceSpringSession sessionFromRepository2 = this.repository.findById(sessionId2);
+
+		assertThat(sessionFromRepository1).isNotNull();
+		assertThat(sessionFromRepository2).isNotNull();
+
+		this.repository.clearAllSessions();
+
+		assertThat(this.repository.findById(sessionId1)).isNull();
+		assertThat(this.repository.findById(sessionId2)).isNull();
+	}
+
+	@Test
 	void createSessionWithSecurityContext() {
 		final CoherenceSpringSession session = this.repository.createSession();
 		final String sessionId = session.getId();
@@ -306,4 +416,16 @@ abstract class AbstractCoherenceIndexedSessionRepositoryTests {
 		assertThat(this.repository.findById(session.getId())).isNull();
 	}
 
+	@Configuration
+	static class CommonConfig {
+		@Bean
+		SessionEventApplicationListener sessionEventRegistry() {
+			return new SessionEventApplicationListener();
+		}
+
+		@Bean
+		MyHttpSessionListener myHttpSessionListener() {
+			return new MyHttpSessionListener();
+		}
+	}
 }

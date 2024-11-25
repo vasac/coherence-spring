@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021, Oracle and/or its affiliates.
+ * Copyright (c) 2021, 2024, Oracle and/or its affiliates.
  *
  * Licensed under the Universal Permissive License v 1.0 as shown at
  * https://oss.oracle.com/licenses/upl.
@@ -15,6 +15,8 @@ import com.oracle.coherence.spring.configuration.CoherenceSpringConfiguration;
 import com.oracle.coherence.spring.session.CoherenceIndexedSessionRepository;
 import com.oracle.coherence.spring.session.config.annotation.SpringSessionCoherenceInstance;
 import com.tangosol.net.Coherence;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -30,6 +32,7 @@ import org.springframework.session.IndexResolver;
 import org.springframework.session.MapSession;
 import org.springframework.session.SaveMode;
 import org.springframework.session.Session;
+import org.springframework.session.SessionIdGenerator;
 import org.springframework.session.config.SessionRepositoryCustomizer;
 import org.springframework.session.config.annotation.web.http.SpringHttpSessionConfiguration;
 import org.springframework.session.web.http.SessionRepositoryFilter;
@@ -48,6 +51,8 @@ import org.springframework.util.StringUtils;
 @Configuration(proxyBeanMethods = false)
 public class CoherenceHttpSessionConfiguration extends SpringHttpSessionConfiguration implements ImportAware {
 
+	private static final Log logger = LogFactory.getLog(CoherenceHttpSessionConfiguration.class);
+
 	private Integer maxInactiveIntervalInSeconds = MapSession.DEFAULT_MAX_INACTIVE_INTERVAL_SECONDS;
 
 	private String sessionMapName = CoherenceIndexedSessionRepository.DEFAULT_SESSION_MAP_NAME;
@@ -56,9 +61,12 @@ public class CoherenceHttpSessionConfiguration extends SpringHttpSessionConfigur
 	private FlushMode flushMode = FlushMode.ON_SAVE;
 	private SaveMode saveMode = SaveMode.ON_SET_ATTRIBUTE;
 
+	private boolean useEntryProcessor = true;
+
 	private Coherence coherence;
 
 	private IndexResolver<Session> indexResolver;
+	private SessionIdGenerator sessionIdGenerator;
 	private List<SessionRepositoryCustomizer<CoherenceIndexedSessionRepository>> sessionRepositoryCustomizers;
 
 	@Bean
@@ -82,7 +90,13 @@ public class CoherenceHttpSessionConfiguration extends SpringHttpSessionConfigur
 	public void setImportMetadata(AnnotationMetadata importMetadata) {
 		final Map<String, Object> attributeMap = importMetadata
 				.getAnnotationAttributes(EnableCoherenceHttpSession.class.getName());
+
 		final AnnotationAttributes attributes = AnnotationAttributes.fromMap(attributeMap);
+
+		if (attributes == null) {
+			return;
+		}
+
 		this.maxInactiveIntervalInSeconds = attributes.getNumber("sessionTimeoutInSeconds");
 		final String sessionMapNameValue = attributes.getString("cache");
 		if (StringUtils.hasText(sessionMapNameValue)) {
@@ -94,11 +108,17 @@ public class CoherenceHttpSessionConfiguration extends SpringHttpSessionConfigur
 		}
 		this.flushMode = attributes.getEnum("flushMode");
 		this.saveMode = attributes.getEnum("saveMode");
+		this.useEntryProcessor = attributes.getBoolean("useEntryProcessor");
 	}
 
 	@Autowired(required = false)
 	public void setIndexResolver(IndexResolver<Session> indexResolver) {
 		this.indexResolver = indexResolver;
+	}
+
+	@Autowired(required = false)
+	public void setSessionIdGenerator(SessionIdGenerator sessionIdGenerator) {
+		this.sessionIdGenerator = sessionIdGenerator;
 	}
 
 	@Autowired(required = false)
@@ -123,7 +143,15 @@ public class CoherenceHttpSessionConfiguration extends SpringHttpSessionConfigur
 		this.saveMode = saveMode;
 	}
 
+	public void setUseEntryProcessor(boolean useEntryProcessor) {
+		this.useEntryProcessor = useEntryProcessor;
+	}
+
 	private CoherenceIndexedSessionRepository createCoherenceIndexedSessionRepository() {
+		if (logger.isInfoEnabled()) {
+			logger.info("Creating CoherenceIndexedSessionRepository...");
+		}
+
 		final com.tangosol.net.Session coherenceSession;
 		if (StringUtils.hasText(this.coherenceSessionName)) {
 			coherenceSession = this.coherence.getSession(this.coherenceSessionName);
@@ -136,12 +164,16 @@ public class CoherenceHttpSessionConfiguration extends SpringHttpSessionConfigur
 		if (this.indexResolver != null) {
 			sessionRepository.setIndexResolver(this.indexResolver);
 		}
+		if (this.sessionIdGenerator != null) {
+			sessionRepository.setSessionIdGenerator(this.sessionIdGenerator);
+		}
 		if (StringUtils.hasText(this.sessionMapName)) {
 			sessionRepository.setSessionMapName(this.sessionMapName);
 		}
 		sessionRepository.setDefaultMaxInactiveInterval(Duration.ofSeconds(this.maxInactiveIntervalInSeconds));
 		sessionRepository.setFlushMode(this.flushMode);
 		sessionRepository.setSaveMode(this.saveMode);
+		sessionRepository.setUseEntryProcessor(this.useEntryProcessor);
 		this.sessionRepositoryCustomizers
 				.forEach((sessionRepositoryCustomizer) -> sessionRepositoryCustomizer.customize(sessionRepository));
 		return sessionRepository;

@@ -6,13 +6,14 @@ spring:
     name: Coherence Spring Hibernate Demo
   jpa:
     properties:
-      hibernate.cache.region.factory_class: com.oracle.coherence.hibernate.cache.CoherenceRegionFactory
+      hibernate.cache.region.factory_class: com.oracle.coherence.hibernate.cache.v6.CoherenceRegionFactory
       hibernate.cache.use_query_cache: true
       hibernate.cache.use_second_level_cache: true
       hibernate.format_sql: true
       hibernate.generate_statistics: true
       hibernate.show_sql: true
       hibernate.use_sql_comments: false
+      com.oracle.coherence.hibernate.cache.session_name: coherence_hibernate
 logging:
   level:
     root: info

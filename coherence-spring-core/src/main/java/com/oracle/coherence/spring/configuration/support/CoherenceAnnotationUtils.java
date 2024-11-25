@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013, 2021, Oracle and/or its affiliates.
+ * Copyright (c) 2013, 2024, Oracle and/or its affiliates.
  *
  * Licensed under the Universal Permissive License v 1.0 as shown at
  * https://oss.oracle.com/licenses/upl.
@@ -8,12 +8,22 @@ package com.oracle.coherence.spring.configuration.support;
 
 import java.lang.annotation.Annotation;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+
 import org.springframework.beans.factory.BeanFactory;
 import org.springframework.beans.factory.InjectionPoint;
+import org.springframework.beans.factory.annotation.AnnotatedBeanDefinition;
+import org.springframework.beans.factory.config.BeanDefinition;
+import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
 import org.springframework.context.ApplicationContext;
+import org.springframework.context.ConfigurableApplicationContext;
+import org.springframework.core.type.AnnotationMetadata;
+import org.springframework.core.type.MethodMetadata;
 import org.springframework.util.Assert;
 import org.springframework.util.StringUtils;
 
@@ -24,6 +34,8 @@ import org.springframework.util.StringUtils;
  * @since 3.0
  */
 public final class CoherenceAnnotationUtils {
+
+	private static final Log logger = LogFactory.getLog(CoherenceAnnotationUtils.class);
 
 	private CoherenceAnnotationUtils() {
 		throw new AssertionError("Utility Class.");
@@ -81,5 +93,69 @@ public final class CoherenceAnnotationUtils {
 		}
 
 		return (T) beans.values().iterator().next();
+	}
+
+	public static <T> Collection<T> getBeansOfTypeWithAnnotation(
+			ConfigurableApplicationContext applicationContext,
+			final Class<? extends T> beanType,
+			final Class<? extends Annotation> annotationType) {
+
+		final List<T> foundSpringBeans = new ArrayList<>();
+
+		final String[] beanNames = applicationContext.getBeanNamesForType(beanType);
+
+		if (logger.isDebugEnabled()) {
+			logger.debug(String.format("Found %s beans in the application context for bean type %s", beanNames.length, beanType.getName()));
+		}
+
+		final ConfigurableListableBeanFactory beanFactory = applicationContext.getBeanFactory();
+
+		for (String beanName : beanNames) {
+			final BeanDefinition beanDefinition = beanFactory.getBeanDefinition(beanName);
+
+			if (beanDefinition instanceof AnnotatedBeanDefinition) {
+				final AnnotatedBeanDefinition annotatedBeanDefinition = (AnnotatedBeanDefinition) beanDefinition;
+				final Object beanDefinitionMetadataSource = annotatedBeanDefinition.getSource();
+
+				if (beanDefinitionMetadataSource != null && beanDefinitionMetadataSource instanceof MethodMetadata
+						&& annotatedBeanDefinition.getSource() != null) {
+					final MethodMetadata beanMethodMetadata = (MethodMetadata) annotatedBeanDefinition.getSource();
+					boolean foundAnnotation = beanMethodMetadata.getAnnotations().isPresent(annotationType);
+
+					if (foundAnnotation) {
+						if (logger.isDebugEnabled()) {
+							logger.debug(String.format("Found annotation %s on Bean %s.", annotationType.getName(), beanName));
+						}
+						foundSpringBeans.add(applicationContext.getBean(beanName, beanType));
+					}
+					else {
+						if (logger.isDebugEnabled()) {
+							logger.debug(String.format("The annotation %s was not found on Bean %s.", annotationType.getName(), beanName));
+						}
+					}
+				}
+
+				final AnnotationMetadata classLevelAnnotationMetadata = annotatedBeanDefinition.getMetadata();
+				boolean foundAnnotation = classLevelAnnotationMetadata.getAnnotations().isPresent(annotationType);
+
+				if (foundAnnotation) {
+					if (logger.isDebugEnabled()) {
+						logger.debug(String.format("Found class-level annotation %s on Bean %s.", annotationType.getName(), beanName));
+					}
+					foundSpringBeans.add(applicationContext.getBean(beanName, beanType));
+				}
+				else {
+					if (logger.isDebugEnabled()) {
+						logger.debug(String.format("The annotation %s was not found on Bean %s.", annotationType.getName(), beanName));
+					}
+				}
+			}
+			else {
+				if (logger.isDebugEnabled()) {
+					logger.debug("Ignoring beanDefinition " + beanName + " as it is not an AnnotatedBeanDefinition.");
+				}
+			}
+		}
+		return foundSpringBeans;
 	}
 }

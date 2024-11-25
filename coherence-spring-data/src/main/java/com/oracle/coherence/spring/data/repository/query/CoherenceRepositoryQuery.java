@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021 Oracle and/or its affiliates.
+ * Copyright (c) 2021, 2024 Oracle and/or its affiliates.
  *
  * Licensed under the Universal Permissive License v 1.0 as shown at
  * https://oss.oracle.com/licenses/upl.
@@ -41,7 +41,9 @@ import org.springframework.data.projection.ProjectionFactory;
 import org.springframework.data.repository.core.RepositoryMetadata;
 import org.springframework.data.repository.query.DefaultParameters;
 import org.springframework.data.repository.query.ParameterAccessor;
+import org.springframework.data.repository.query.Parameters;
 import org.springframework.data.repository.query.ParametersParameterAccessor;
+import org.springframework.data.repository.query.ParametersSource;
 import org.springframework.data.repository.query.QueryMethod;
 import org.springframework.data.repository.query.RepositoryQuery;
 import org.springframework.data.repository.query.ResultProcessor;
@@ -58,7 +60,7 @@ import static com.oracle.coherence.spring.data.support.Utils.toComparator;
  * Coherence implementation of {@link RepositoryQuery}.
  *
  * @author Ryan Lubke
- * @since 3.0.0
+ * @since 3.0
  */
 public class CoherenceRepositoryQuery implements RepositoryQuery {
 
@@ -112,7 +114,11 @@ public class CoherenceRepositoryQuery implements RepositoryQuery {
 	public Object execute(Object[] parameters) {
 
 		PartTree partTree = new PartTree(this.method.getName(), this.metadata.getDomainType());
-		ParameterAccessor accessor = new ParametersParameterAccessor(new DefaultParameters(this.method), parameters);
+
+		Parameters<?, ?> springDataParameters = new DefaultParameters(ParametersSource.of(this.metadata, this.method));
+
+		ParameterAccessor accessor = new ParametersParameterAccessor(springDataParameters, parameters);
+
 		CoherenceQueryCreator creator = new CoherenceQueryCreator(partTree, accessor);
 		QueryResult queryResult = creator.createQuery();
 
@@ -142,6 +148,9 @@ public class CoherenceRepositoryQuery implements RepositoryQuery {
 			limitFilter = configureLimitFilter(pageable, filter);
 			if (limitFilter != null) {
 				filter = limitFilter;
+			}
+			else {
+				throw new IllegalStateException("LimitFilter should not have been null.");
 			}
 		}
 
@@ -275,5 +284,25 @@ public class CoherenceRepositoryQuery implements RepositoryQuery {
 	public QueryMethod getQueryMethod() {
 
 		return this.queryMethod;
+	}
+
+	/**
+	 * Custom {@link Parameters} implementation, so we can call the super constructor. We should not really have to do
+	 * this. This is a workaround for the fact that the constructor is protected.
+	 */
+	class MyDefaultParameters extends Parameters {
+
+		private MyDefaultParameters(List<org.springframework.data.repository.query.Parameter> parameters) {
+			super(parameters);
+		}
+
+		MyDefaultParameters(Method method) {
+			super(ParametersSource.of(method), null);
+		}
+
+		@Override
+		protected Parameters createFrom(List parameters) {
+			return new MyDefaultParameters(parameters);
+		}
 	}
 }

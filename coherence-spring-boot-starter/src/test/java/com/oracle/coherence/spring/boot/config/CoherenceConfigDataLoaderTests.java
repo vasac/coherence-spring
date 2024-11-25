@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013, 2021, Oracle and/or its affiliates.
+ * Copyright (c) 2013, 2023, Oracle and/or its affiliates.
  *
  * Licensed under the Universal Permissive License v 1.0 as shown at
  * https://oss.oracle.com/licenses/upl.
@@ -7,11 +7,19 @@
 package com.oracle.coherence.spring.boot.config;
 
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
-import com.oracle.coherence.spring.test.junit.CoherenceServerJunitExtension;
-import com.tangosol.net.Coherence;
+import com.oracle.bedrock.runtime.LocalPlatform;
+import com.oracle.bedrock.runtime.coherence.CoherenceClusterMember;
+import com.oracle.bedrock.runtime.coherence.options.LocalHost;
+import com.oracle.bedrock.runtime.java.options.IPv4Preferred;
+import com.oracle.bedrock.runtime.java.options.SystemProperty;
+import com.oracle.bedrock.runtime.options.DisplayName;
+import com.oracle.coherence.spring.test.utils.IsGrpcProxyRunning;
+import org.awaitility.Awaitility;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -27,23 +35,53 @@ import static org.assertj.core.api.Assertions.assertThat;
  * @author Gunnar Hillert
  *
  */
-@ExtendWith(CoherenceServerJunitExtension.class)
-@SpringBootTest(classes = {
-		CoherenceConfigDataLoaderTests.DataLoaderConfig.class,
-		CoherenceConfigClientProperties.class
-})
+@SpringBootTest(
+		properties = { "coherence.tcmp.enabled=false",
+						"coherence.cluster=CoherenceConfigDataLoaderTests",
+						"coherence.client=grpc",
+						"coherence-spring.test-cluster-name=CoherenceConfigDataLoaderTests"
+		},
+		classes = {
+			CoherenceConfigDataLoaderTests.DataLoaderConfig.class,
+			CoherenceConfigClientProperties.class
+		})
 @ActiveProfiles("custom")
 @DirtiesContext
 public class CoherenceConfigDataLoaderTests {
 
+	private static CoherenceClusterMember server;
+
 	@Autowired
-	Environment env;
+	private Environment env;
 
-	final Coherence coherence;
+	static {
+		System.setProperty("coherence-spring.test-cluster-name", "CoherenceConfigDataLoaderTests");
+	}
 
-	public CoherenceConfigDataLoaderTests(Coherence coherence) {
-		this.coherence = coherence;
-		final Map<String, Object> properties = this.coherence.getSession().getMap("berlin-kona");
+	@BeforeAll
+	static void setup() throws Exception {
+		final LocalPlatform platform = LocalPlatform.get();
+
+		// Start the Coherence server
+		server = platform.launch(CoherenceClusterMember.class,
+				LocalHost.only(),
+				IPv4Preferred.yes(),
+				SystemProperty.of("coherence.cluster", "CoherenceConfigDataLoaderTests"),
+				SystemProperty.of("coherence.grpc.enabled", true),
+				SystemProperty.of("coherence.wka", "127.0.0.1"),
+				DisplayName.of("server"));
+		Awaitility.await().atMost(70, TimeUnit.SECONDS).until(() -> server.invoke(IsGrpcProxyRunning.INSTANCE));
+	}
+
+	@AfterAll
+	static void cleanup() {
+		if (server != null) {
+			server.close();
+		}
+	}
+
+	public CoherenceConfigDataLoaderTests() {
+		final Map<String, Object> properties = server.getSession().getMap("berlin-kona");
 		//properties.put("foo", "remote");
 		properties.put("test.foo", "bar");
 		properties.put("test.numeric", 1234);
@@ -58,5 +96,4 @@ public class CoherenceConfigDataLoaderTests {
 	@Configuration
 	static class DataLoaderConfig {
 	}
-
 }

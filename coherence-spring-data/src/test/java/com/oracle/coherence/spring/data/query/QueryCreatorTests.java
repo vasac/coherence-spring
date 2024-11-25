@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013, 2021, Oracle and/or its affiliates.
+ * Copyright (c) 2013, 2022, Oracle and/or its affiliates.
  *
  * Licensed under the Universal Permissive License v 1.0 as shown at
  * https://oss.oracle.com/licenses/upl.
@@ -8,7 +8,6 @@ package com.oracle.coherence.spring.data.query;
 
 import java.util.Arrays;
 import java.util.Iterator;
-import java.util.Optional;
 
 import com.oracle.coherence.spring.data.model.Book;
 import com.oracle.coherence.spring.data.repository.query.CoherenceQueryCreator;
@@ -25,11 +24,12 @@ import com.tangosol.util.filter.NotFilter;
 import org.junit.jupiter.api.Test;
 
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.ScrollPosition;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.repository.query.ParameterAccessor;
 import org.springframework.data.repository.query.parser.PartTree;
 
-import static com.oracle.coherence.spring.data.AbstractDataTest.FRANK_HERBERT;
+import static com.oracle.coherence.spring.data.AbstractDataTests.FRANK_HERBERT;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -596,6 +596,11 @@ public class QueryCreatorTests {
 		}
 
 		@Override
+		public ScrollPosition getScrollPosition() {
+				return null;
+		}
+
+		@Override
 		public Pageable getPageable() {
 			return null;
 		}
@@ -603,11 +608,6 @@ public class QueryCreatorTests {
 		@Override
 		public Sort getSort() {
 			return null;
-		}
-
-		@Override
-		public Optional<Class<?>> getDynamicProjection() {
-			return Optional.empty();
 		}
 
 		@Override

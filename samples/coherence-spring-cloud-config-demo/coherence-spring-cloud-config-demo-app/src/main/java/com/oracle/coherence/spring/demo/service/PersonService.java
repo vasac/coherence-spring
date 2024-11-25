@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2021, Oracle and/or its affiliates.
+ * Copyright (c) 2021, 2022, Oracle and/or its affiliates.
  *
  * Licensed under the Universal Permissive License v 1.0 as shown at
- * http://oss.oracle.com/licenses/upl.
+ * https://oss.oracle.com/licenses/upl.
  */
 package com.oracle.coherence.spring.demo.service;
 
@@ -20,23 +20,23 @@ public interface PersonService {
 
 	/**
 	 *
-	 * @return
+	 * @return a paged list of people
 	 */
 	Page<Person> listPeople(Pageable pageable);
 
 	/**
 	 *
-	 * @param firstName
-	 * @param lastName
-	 * @param age
-	 * @return
+	 * @param firstName must not be null or empty
+	 * @param lastName must not be null or empty
+	 * @param age requires positive value
+	 * @return the id of the created person
 	 */
 	Long createAndStorePerson(String firstName, String lastName, int age);
 
 	/**
 	 *
-	 * @param personId
-	 * @param eventId
+	 * @param personId the person to add
+	 * @param eventId the event to add the person to
 	 */
 	void addPersonToEvent(Long personId, Long eventId);
 

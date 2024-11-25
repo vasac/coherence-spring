@@ -1,11 +1,12 @@
 /*
- * Copyright (c) 2013, 2021, Oracle and/or its affiliates.
+ * Copyright (c) 2013, 2023, Oracle and/or its affiliates.
  *
  * Licensed under the Universal Permissive License v 1.0 as shown at
  * https://oss.oracle.com/licenses/upl.
  */
 package com.oracle.coherence.spring.boot.autoconfigure;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -13,8 +14,9 @@ import java.util.Map;
 
 import com.oracle.coherence.spring.boot.autoconfigure.support.LogType;
 import com.oracle.coherence.spring.configuration.session.AbstractSessionConfigurationBean;
-import com.oracle.coherence.spring.configuration.session.GrpcSessionConfigurationBean;
-import com.oracle.coherence.spring.configuration.session.SessionConfigurationBean;
+import com.oracle.coherence.spring.configuration.session.ClientSessionConfigurationBean;
+import com.oracle.coherence.spring.configuration.session.ServerSessionConfigurationBean;
+import com.oracle.coherence.spring.configuration.support.CoherenceInstanceType;
 import com.oracle.coherence.spring.configuration.support.SpringSystemPropertyResolver;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
@@ -34,11 +36,6 @@ public class CoherenceProperties {
 	 * Configuration prefix for config properties.
 	 */
 	public static final String PREFIX = "coherence";
-
-	/**
-	 * Default service name prefix. Defaults recursively to ${code coherence.role}.
-	 */
-	private static final String SERVICE_NAME_PREFIX = "coherence.service.prefix";
 
 	/**
 	 * The name of the config property for the character limit.
@@ -75,13 +72,26 @@ public class CoherenceProperties {
 	 */
 	private LoggingProperties logging;
 
-	//TODO
-	private boolean configEnabled;
+	/**
+	 * Spring cache abstraction configuration.
+	 */
+	private CacheAbstractionProperties cache = new CacheAbstractionProperties();
+
 
 	/**
 	 * Default prefix for Coherence properties. Defaults to {@link SpringSystemPropertyResolver#DEFAULT_PROPERTY_PREFIX}.
 	 */
 	private String propertyPrefix = SpringSystemPropertyResolver.DEFAULT_PROPERTY_PREFIX;
+
+	/**
+	 * Configuration properties of the Coherence Server.
+	 */
+	private ServerProperties server = new ServerProperties();
+
+	/**
+	 * Configuration properties of the Coherence Instance.
+	 */
+	private InstanceProperties instance = new InstanceProperties();
 
 	/**
 	 * Session configuration.
@@ -112,20 +122,36 @@ public class CoherenceProperties {
 		this.logging = logging;
 	}
 
-	public boolean isConfigEnabled() {
-		return this.configEnabled;
-	}
-
-	public void setConfigEnabled(boolean configEnabled) {
-		this.configEnabled = configEnabled;
-	}
-
 	public String getPropertyPrefix() {
 		return this.propertyPrefix;
 	}
 
 	public void setPropertyPrefix(String propertyPrefix) {
 		this.propertyPrefix = propertyPrefix;
+	}
+
+	public CacheAbstractionProperties getCache() {
+		return this.cache;
+	}
+
+	public void setCache(CacheAbstractionProperties cache) {
+		this.cache = cache;
+	}
+
+	public ServerProperties getServer() {
+		return this.server;
+	}
+
+	public void setServer(ServerProperties server) {
+		this.server = server;
+	}
+
+	public InstanceProperties getInstance() {
+		return this.instance;
+	}
+
+	public void setInstance(InstanceProperties instance) {
+		this.instance = instance;
 	}
 
 	/**
@@ -249,43 +275,31 @@ public class CoherenceProperties {
 	public static class SessionProperties {
 
 		/**
-		 * Session configuration.
+		 * Client Session configuration.
 		 */
-		private List<GrpcSessionConfigurationBean> grpc;
+		private List<ClientSessionConfigurationBean> client;
 
 		/**
 		 * Session configuration.
 		 */
-		private List<SessionConfigurationBean> client;
+		private List<ServerSessionConfigurationBean> server;
 
-		/**
-		 * Session configuration.
-		 */
-		private List<SessionConfigurationBean> server;
-
-		public List<GrpcSessionConfigurationBean> getGrpc() {
-			return this.grpc;
-		}
-
-		public void setGrpc(List<GrpcSessionConfigurationBean> grpc) {
-			this.grpc = grpc;
-		}
-
-		public List<SessionConfigurationBean> getClient() {
+		public List<ClientSessionConfigurationBean> getClient() {
 			return this.client;
 		}
 
-		public void setClient(List<SessionConfigurationBean> client) {
+		public void setClient(List<ClientSessionConfigurationBean> client) {
 			this.client = client;
 		}
 
-		public List<SessionConfigurationBean> getServer() {
+		public List<ServerSessionConfigurationBean> getServer() {
 			return this.server;
 		}
 
-		public void setServer(List<SessionConfigurationBean> server) {
+		public void setServer(List<ServerSessionConfigurationBean> server) {
 			this.server = server;
 		}
+
 
 		public List<AbstractSessionConfigurationBean> getAllSessionConfigurationBeans() {
 			final List<AbstractSessionConfigurationBean> sessionConfigurationBeans = new ArrayList<>();
@@ -295,10 +309,136 @@ public class CoherenceProperties {
 			if (!CollectionUtils.isEmpty(this.server)) {
 				sessionConfigurationBeans.addAll(this.server);
 			}
-			if (!CollectionUtils.isEmpty(this.grpc)) {
-				sessionConfigurationBeans.addAll(this.grpc);
-			}
 			return sessionConfigurationBeans;
+		}
+	}
+
+	/**
+	 * Spring cache abstraction properties.
+	 */
+	public static class CacheAbstractionProperties {
+
+		/**
+		 * Defines the global time-to-live (ttl) value for Coherence cache entries that are used as part of the Spring Cache
+		 * abstraction. By default, this property will be initialized with a value of {@link Duration#ZERO}, which
+		 * means that the expiration value for cache values will NOT be specified when performing cache puts. However,
+		 * depending on your Coherence cache configuration in coherence-cache-config.xml, cache values may still expire.
+		 */
+		private Duration timeToLive = Duration.ZERO;
+
+		/**
+		 * Disabled by default. Prepend cache names with a prefix.
+		 */
+		private boolean useCacheNamePrefix = false;
+
+		/**
+		 * The String to prepend cache names with. Empty by default
+		 */
+		private String cacheNamePrefix = "";
+
+		/**
+		 * Enabled by default. Lock cache entries. When using Coherence*Extend or gRPC, it is recommended to not use
+		 * locking.
+		 */
+		private boolean useLocks = true;
+
+		/**
+		 * Disabled by default. Locks the entire cache. This is usually not recommended.
+		 */
+		private boolean lockEntireCache = false;
+
+		/**
+		 * The number of milliseconds to continue trying to obtain a lock. When pass zero the lock attempt will to return
+		 * immediately. Passing -1 will block indefinitely until the lock could be obtained. Defaults to 0.
+		 */
+		private long lockTimeout = 0;
+
+		public Duration getTimeToLive() {
+			return this.timeToLive;
+		}
+
+		public void setTimeToLive(Duration timeToLive) {
+			this.timeToLive = timeToLive;
+		}
+
+		public String getCacheNamePrefix() {
+			return this.cacheNamePrefix;
+		}
+
+		public void setCacheNamePrefix(String cacheNamePrefix) {
+			this.cacheNamePrefix = cacheNamePrefix;
+		}
+
+		public boolean isUseCacheNamePrefix() {
+			return this.useCacheNamePrefix;
+		}
+
+		public void setUseCacheNamePrefix(boolean useCacheNamePrefix) {
+			this.useCacheNamePrefix = useCacheNamePrefix;
+		}
+
+		public boolean isUseLocks() {
+			return this.useLocks;
+		}
+
+		public void setUseLocks(boolean useLocks) {
+			this.useLocks = useLocks;
+		}
+
+		public boolean isLockEntireCache() {
+			return this.lockEntireCache;
+		}
+
+		public void setLockEntireCache(boolean lockEntireCache) {
+			this.lockEntireCache = lockEntireCache;
+		}
+
+		public long getLockTimeout() {
+			return this.lockTimeout;
+		}
+
+		public void setLockTimeout(long lockTimeout) {
+			this.lockTimeout = lockTimeout;
+		}
+	}
+
+	/**
+	 * Configuration properties of the Coherence Instance.
+	 */
+	public static class InstanceProperties {
+
+		/**
+		 * Defines the type of the Coherence instance. If not specified, defaults to CLIENT or CLUSTER, depending on the
+		 * configured Coherence sessions.
+		 */
+		private CoherenceInstanceType type;
+
+		public CoherenceInstanceType getType() {
+			return this.type;
+		}
+
+		public void setType(CoherenceInstanceType type) {
+			this.type = type;
+		}
+	}
+
+	/**
+	 * Configuration properties of the Coherence Server.
+	 */
+	public static class ServerProperties {
+
+		/**
+		 * Overrides the default startup-timeout when starting Coherence. If not set, defaults to
+		 * {@link com.oracle.coherence.spring.CoherenceServer#DEFAULT_STARTUP_TIMEOUT_MILLIS}.
+		 */
+		private Duration startupTimeout;
+
+		public Duration getStartupTimeout() {
+			return this.startupTimeout;
+		}
+
+		public void setStartupTimeout(Duration startupTimeout) {
+			this.startupTimeout = startupTimeout;
 		}
 	}
 }

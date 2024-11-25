@@ -1,17 +1,8 @@
 /*
- * Copyright 2017-2021 original authors
+ * Copyright (c) 2013, 2023, Oracle and/or its affiliates.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * https://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Licensed under the Universal Permissive License v 1.0 as shown at
+ * https://oss.oracle.com/licenses/upl.
  */
 package com.oracle.coherence.spring.test.junit;
 
@@ -22,31 +13,70 @@ import com.tangosol.net.Coherence;
 import com.tangosol.net.CoherenceConfiguration;
 import com.tangosol.net.SessionConfiguration;
 import io.github.classgraph.ClassGraph;
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.junit.jupiter.api.extension.AfterAllCallback;
 import org.junit.jupiter.api.extension.BeforeAllCallback;
 import org.junit.jupiter.api.extension.ExtensionContext;
 import org.junit.jupiter.api.extension.ParameterContext;
 import org.junit.jupiter.api.extension.ParameterResolutionException;
 import org.junit.jupiter.api.extension.ParameterResolver;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Provides an embedded Coherence Cluster as a Junit5 extension.
+ *
  * @author Gunnar Hillert
+ * @since 3.0
  */
 public class CoherenceServerJunitExtension implements ParameterResolver,
 		BeforeAllCallback, AfterAllCallback {
 
-	protected static final Log logger = LogFactory.getLog(CoherenceServerJunitExtension.class);
+	/**
+	 * Logger declaration.
+	 */
+	protected static final Logger logger = LoggerFactory.getLogger(CoherenceServerJunitExtension.class);
+
+	private final String configUri;
+	private final boolean grpcEnabled;
 
 	private Coherence coherence;
 
+	/**
+	 * Initialize CoherenceServerJunitExtension.
+	 * @param grpcEnabled if true, will set `coherence.grpc.enabled` to true
+	 */
+	public CoherenceServerJunitExtension(boolean grpcEnabled) {
+		this.configUri = "coherence-cache-config.xml";
+		this.grpcEnabled = grpcEnabled;
+	}
+
+	/**
+	 * Initialize CoherenceServerJunitExtension. Will
+	 * implicitly set {@link CoherenceServerJunitExtension#grpcEnabled} to false.
+	 */
+	public CoherenceServerJunitExtension() {
+		this(false);
+	}
+
+	/**
+	 * Initialize CoherenceServerJunitExtension. Will
+	 * implicitly set {@link CoherenceServerJunitExtension#grpcEnabled} to false.
+	 * @param configUri specify the Coherence cache config XML file
+	 */
+	public CoherenceServerJunitExtension(String configUri) {
+		this.configUri = configUri;
+		this.grpcEnabled = false;
+	}
+
 	@Override
 	public void afterAll(ExtensionContext context) {
-		this.coherence.getCluster().shutdown();
-		this.coherence.close();
+		Coherence.closeAll();
+		this.coherence.whenClosed().join();
+
 		System.clearProperty("coherence.log");
+		System.clearProperty("coherence.grpc.enabled");
+		System.clearProperty("coherence.grpc.server.port");
+
 		if (logger.isInfoEnabled()) {
 			logger.info("Shutting down Coherence complete.");
 		}
@@ -54,15 +84,20 @@ public class CoherenceServerJunitExtension implements ParameterResolver,
 
 	@Override
 	public void beforeAll(ExtensionContext context) throws Exception {
+		System.setProperty("coherence.grpc.server.port", "1408");
 		System.setProperty("coherence.log", "slf4j");
+		System.setProperty("coherence.grpc.enabled", String.valueOf(this.grpcEnabled));
+		System.setProperty("coherence.grpc.server.port", "1408");
+
 		if (logger.isInfoEnabled()) {
 			logger.info("JunitExtension - Starting up Coherence...");
 		}
+
 		final SessionConfiguration.Builder sessionConfigurationBuilder = (SessionConfiguration.Builder) getFromTestClassloader(SessionConfiguration.class)
 				.getMethod("builder")
 				.invoke(null);
 		final SessionConfiguration sessionConfiguration = sessionConfigurationBuilder
-				.withConfigUri("coherence-cache-config.xml")
+				.withConfigUri(this.configUri)
 				.build();
 
 		final CoherenceConfiguration.Builder coherenceBuilder = (CoherenceConfiguration.Builder) getFromTestClassloader(CoherenceConfiguration.class)

@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2021, Oracle and/or its affiliates.
+ * Copyright (c) 2021, 2022, Oracle and/or its affiliates.
  *
  * Licensed under the Universal Permissive License v 1.0 as shown at
- * http://oss.oracle.com/licenses/upl.
+ * https://oss.oracle.com/licenses/upl.
  */
 package com.oracle.coherence.spring.demo.service.impl;
 
@@ -52,7 +52,7 @@ public class DefaultEventService implements EventService {
 	@Cacheable(cacheNames="events", key="#id")
 	@Override
 	public Event getEvent(Long id) {
-		return this.eventRepository.findById(id).get();
+		return this.eventRepository.findById(id).orElseThrow(() -> new IllegalArgumentException("No event found for id: " + id));
 	}
 
 	@Override

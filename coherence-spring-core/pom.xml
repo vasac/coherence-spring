@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
 <!--
-  Copyright (c) 2013, 2021, Oracle and/or its affiliates.
+  Copyright (c) 2013, 2023, Oracle and/or its affiliates.
   Licensed under the Universal Permissive License v 1.0 as shown at
   https://oss.oracle.com/licenses/upl.
 -->
@@ -13,7 +13,7 @@
 	<parent>
 		<groupId>com.oracle.coherence.spring</groupId>
 		<artifactId>coherence-spring-parent</artifactId>
-		<version>3.0.0-SNAPSHOT</version>
+		<version>4.2.1-SNAPSHOT</version>
 	</parent>
 
 	<artifactId>coherence-spring-core</artifactId>
@@ -35,13 +35,13 @@
 	</build>
 	<dependencies>
 		<dependency>
-			<groupId>com.oracle.coherence.ce</groupId>
+			<groupId>${coherence.groupId}</groupId>
 			<artifactId>coherence</artifactId>
 			<version>${coherence.version}</version>
 			<scope>provided</scope>
 		</dependency>
 		<dependency>
-			<groupId>com.oracle.coherence.ce</groupId>
+			<groupId>${coherence.groupId}</groupId>
 			<artifactId>coherence-java-client</artifactId>
 			<version>${coherence.version}</version>
 			<scope>provided</scope>
@@ -67,9 +67,14 @@
 			<artifactId>spring-messaging</artifactId>
 		</dependency>
 		<dependency>
-			<groupId>javax</groupId>
-			<artifactId>javaee-api</artifactId>
-			<version>${javaee-api.version}</version>
+			<groupId>org.springframework.data</groupId>
+			<artifactId>spring-data-jpa</artifactId>
+			<scope>provided</scope>
+		</dependency>
+		<dependency>
+			<groupId>jakarta.platform</groupId>
+			<artifactId>jakarta.jakartaee-api</artifactId>
+			<version>${jakartaee-api.version}</version>
 			<scope>provided</scope>
 		</dependency>
 		<dependency>
@@ -78,9 +83,9 @@
 			<version>${reactor.version}</version>
 		</dependency>
 		<dependency>
-			<groupId>javax.annotation</groupId>
-			<artifactId>javax.annotation-api</artifactId>
-			<version>${javax.annotation-api.version}</version>
+			<groupId>jakarta.annotation</groupId>
+			<artifactId>jakarta.annotation-api</artifactId>
+			<version>${jakarta.annotation-api.version}</version>
 		</dependency>
 		<dependency>
 			<groupId>org.springframework</groupId>
@@ -112,21 +117,27 @@
 			<scope>test</scope>
 		</dependency>
 		<dependency>
+			<groupId>org.apache.logging.log4j</groupId>
+			<artifactId>log4j-slf4j2-impl</artifactId>
+			<version>${log4j.version}</version>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
 			<groupId>org.assertj</groupId>
 			<artifactId>assertj-core</artifactId>
 			<version>${assertj.version}</version>
 			<scope>test</scope>
+			<exclusions>
+				<exclusion>
+					<artifactId>byte-buddy</artifactId>
+					<groupId>net.bytebuddy</groupId>
+				</exclusion>
+			</exclusions>
 		</dependency>
 		<dependency>
 			<groupId>org.mockito</groupId>
-			<artifactId>mockito-all</artifactId>
+			<artifactId>mockito-core</artifactId>
 			<version>${mockito.version}</version>
-			<scope>test</scope>
-		</dependency>
-		<dependency>
-			<groupId>com.oracle.bedrock</groupId>
-			<artifactId>bedrock-testing-support</artifactId>
-			<version>${bedrock.version}</version>
 			<scope>test</scope>
 		</dependency>
 		<dependency>
@@ -136,7 +147,7 @@
 			<scope>test</scope>
 		</dependency>
 		<dependency>
-			<groupId>com.oracle.coherence.ce</groupId>
+			<groupId>${coherence.groupId}</groupId>
 			<artifactId>coherence-grpc-proxy</artifactId>
 			<version>${coherence.version}</version>
 			<scope>test</scope>

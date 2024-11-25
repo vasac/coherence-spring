@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021, Oracle and/or its affiliates.
+ * Copyright (c) 2021, 2024, Oracle and/or its affiliates.
  *
  * Licensed under the Universal Permissive License v 1.0 as shown at
  * https://oss.oracle.com/licenses/upl.
@@ -12,16 +12,16 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 
-import javax.annotation.PostConstruct;
-import javax.annotation.PreDestroy;
-
-import com.oracle.coherence.spring.session.events.CoherenceSessionCreatedEventHandler;
-import com.oracle.coherence.spring.session.events.SessionRemovedMapListener;
+import com.oracle.coherence.spring.session.events.CoherenceSessionEventMapListener;
 import com.oracle.coherence.spring.session.support.PrincipalNameExtractor;
+import com.tangosol.coherence.memcached.server.MemcachedHelper;
 import com.tangosol.net.NamedCache;
-import com.tangosol.net.events.internal.NamedEventInterceptor;
+import com.tangosol.net.cache.CacheMap;
+import com.tangosol.util.BinaryEntry;
 import com.tangosol.util.Filter;
 import com.tangosol.util.filter.EqualsFilter;
+import jakarta.annotation.PostConstruct;
+import jakarta.annotation.PreDestroy;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 
@@ -35,18 +35,21 @@ import org.springframework.session.MapSession;
 import org.springframework.session.PrincipalNameIndexResolver;
 import org.springframework.session.SaveMode;
 import org.springframework.session.Session;
+import org.springframework.session.SessionIdGenerator;
+import org.springframework.session.SessionRepository;
+import org.springframework.session.UuidSessionIdGenerator;
 import org.springframework.session.events.AbstractSessionEvent;
 import org.springframework.util.Assert;
 
 /**
- * The {@link CoherenceIndexedSessionRepository} is a {@link org.springframework.session.SessionRepository}
- * implementation that stores sessions in Coherence's distributed {@link com.tangosol.net.cache.CacheMap}.
+ * The {@link CoherenceIndexedSessionRepository} is a {@link SessionRepository}
+ * implementation that stores sessions in Coherence's distributed {@link CacheMap}.
  *
  * @author Gunnar Hillert
  * @since 3.0
  */
 public class CoherenceIndexedSessionRepository implements FindByIndexNameSessionRepository<CoherenceSpringSession>,
-		ApplicationEventPublisherAware  {
+		ApplicationEventPublisherAware {
 
 	/**
 	 * The default name of map used by Spring Session to store sessions.
@@ -83,6 +86,13 @@ public class CoherenceIndexedSessionRepository implements FindByIndexNameSession
 	private NamedCache<String, MapSession> sessionCache;
 
 	/**
+	 * Shall a Coherence Entry Processor be used for handling updates to session? Defaults to true.
+	 */
+	private boolean useEntryProcessor = true;
+
+	private SessionIdGenerator sessionIdGenerator = UuidSessionIdGenerator.getInstance();
+
+	/**
 	 * Create a new {@link CoherenceIndexedSessionRepository} instance.
 	 * @param coherenceSession the Coherence {@link com.tangosol.net.Session} instance to use for managing sessions
 	 */
@@ -95,20 +105,16 @@ public class CoherenceIndexedSessionRepository implements FindByIndexNameSession
 	public void init() {
 		this.sessionCache = this.coherenceSession.getCache(this.sessionMapName);
 
-		final CoherenceSessionCreatedEventHandler coherenceSessionEventHandler = new CoherenceSessionCreatedEventHandler(this.eventPublisher);
-		final SessionRemovedMapListener sessionRemovedMapListener = new SessionRemovedMapListener(this.eventPublisher);
-
-		coherenceSessionEventHandler.setScopeName(this.coherenceSession.getScopeName());
-		coherenceSessionEventHandler.setCacheName(this.sessionCache.getCacheName());
-
+		final CoherenceSessionEventMapListener sessionRemovedMapListener = new CoherenceSessionEventMapListener(this.eventPublisher);
 		this.sessionCache.addMapListener(sessionRemovedMapListener);
-		final NamedEventInterceptor<?> interceptor = new NamedEventInterceptor<>(CoherenceSessionCreatedEventHandler.class.getName(), coherenceSessionEventHandler);
-		this.coherenceSession.getInterceptorRegistry().registerEventInterceptor(interceptor);
 
 		if (logger.isDebugEnabled()) {
+			final String maxInactiveInterval =
+					(this.defaultMaxInactiveInterval != null) ? String.valueOf(this.defaultMaxInactiveInterval.getSeconds()) : "null";
 			logger.debug(String.format("CoherenceIndexedSessionRepository initialized with "
-					+ "[Scope: %s; cache: %s; defaultMaxInactiveInterval: %ssec]",
-					this.coherenceSession.getScopeName(), this.sessionCache.getCacheName(), this.defaultMaxInactiveInterval));
+							+ "[Scope: '%s'; cache: '%s'; defaultMaxInactiveInterval: %ssec; useEntryProcessor: %s]",
+					this.coherenceSession.getScopeName(), this.sessionCache.getCacheName(),
+					maxInactiveInterval, this.useEntryProcessor));
 		}
 	}
 
@@ -139,6 +145,16 @@ public class CoherenceIndexedSessionRepository implements FindByIndexNameSession
 	}
 
 	/**
+	 * Sets the {@link SessionIdGenerator} to be used when generating a new session id. If not specified
+	 * a {@link UuidSessionIdGenerator} will be used.
+	 * @param sessionIdGenerator the {@link SessionIdGenerator} to use. Must not be null.
+	 */
+	public void setSessionIdGenerator(SessionIdGenerator sessionIdGenerator) {
+		Assert.notNull(sessionIdGenerator, "sessionIdGenerator cannot be null");
+		this.sessionIdGenerator = sessionIdGenerator;
+	}
+
+	/**
 	 * Set the name of map used to store sessions.
 	 * @param sessionMapName the session map name
 	 */
@@ -165,9 +181,17 @@ public class CoherenceIndexedSessionRepository implements FindByIndexNameSession
 		this.saveMode = saveMode;
 	}
 
+	public void setUseEntryProcessor(boolean useEntryProcessor) {
+		this.useEntryProcessor = useEntryProcessor;
+	}
+
+	public boolean isUseEntryProcessor() {
+		return this.useEntryProcessor;
+	}
+
 	@Override
 	public CoherenceSpringSession createSession() {
-		MapSession cached = new MapSession();
+		MapSession cached = new MapSession(this.sessionIdGenerator);
 		if (this.defaultMaxInactiveInterval != null) {
 			cached.setMaxInactiveInterval(this.defaultMaxInactiveInterval);
 		}
@@ -201,18 +225,28 @@ public class CoherenceIndexedSessionRepository implements FindByIndexNameSession
 			}
 		}
 		else if (session.hasChanges()) {
-			final SessionUpdateEntryProcessor entryProcessor = new SessionUpdateEntryProcessor();
-			entryProcessor.setDefaultMaxInactiveInterval(this.defaultMaxInactiveInterval);
-			if (session.isLastAccessedTimeChanged()) {
-				entryProcessor.setLastAccessedTime(session.getLastAccessedTime());
+			if (this.isUseEntryProcessor()) {
+				final SessionUpdateEntryProcessor entryProcessor = new SessionUpdateEntryProcessor();
+				entryProcessor.setDefaultMaxInactiveInterval(this.defaultMaxInactiveInterval);
+				if (session.isLastAccessedTimeChanged()) {
+					entryProcessor.setLastAccessedTime(session.getLastAccessedTime());
+				}
+				if (session.isMaxInactiveIntervalChanged()) {
+					entryProcessor.setMaxInactiveInterval(session.getMaxInactiveInterval());
+				}
+				if (!session.getDelta().isEmpty()) {
+					entryProcessor.setDelta(new HashMap<>(session.getDelta()));
+				}
+				this.sessionCache.invoke(session.getId(), entryProcessor);
 			}
-			if (session.isMaxInactiveIntervalChanged()) {
-				entryProcessor.setMaxInactiveInterval(session.getMaxInactiveInterval());
+			else {
+				if (expireCacheEntry) {
+					this.sessionCache.put(session.getId(), session.getDelegate(), maxInactiveIntervalMillis);
+				}
+				else {
+					this.sessionCache.put(session.getId(), session.getDelegate());
+				}
 			}
-			if (!session.getDelta().isEmpty()) {
-				entryProcessor.setDelta(new HashMap<>(session.getDelta()));
-			}
-			this.sessionCache.invoke(session.getId(), entryProcessor);
 		}
 		session.clearChangeFlags();
 
@@ -228,6 +262,7 @@ public class CoherenceIndexedSessionRepository implements FindByIndexNameSession
 			deleteById(saved.getId());
 			return null;
 		}
+		saved.setSessionIdGenerator(this.sessionIdGenerator);
 		return new CoherenceSpringSession(this, saved, false);
 	}
 
@@ -246,7 +281,9 @@ public class CoherenceIndexedSessionRepository implements FindByIndexNameSession
 
 		final Map<String, CoherenceSpringSession> sessionMap = new HashMap<>(sessions.size());
 		for (Map.Entry<String, MapSession> session : sessions) {
-			sessionMap.put(session.getValue().getId(), new CoherenceSpringSession(this, session.getValue(), false));
+			final MapSession mapSession = session.getValue();
+			mapSession.setSessionIdGenerator(this.sessionIdGenerator);
+			sessionMap.put(session.getValue().getId(), new CoherenceSpringSession(this, mapSession, false));
 		}
 		return sessionMap;
 	}
@@ -268,10 +305,39 @@ public class CoherenceIndexedSessionRepository implements FindByIndexNameSession
 	 * {@link AbstractSessionEvent session events}. The default is to not publish session
 	 * events.
 	 * @param applicationEventPublisher the {@link ApplicationEventPublisher} that is used
-	 * to publish session events. Cannot be null.
+	 *                                  to publish session events. Cannot be null.
 	 */
 	public void setApplicationEventPublisher(ApplicationEventPublisher applicationEventPublisher) {
 		Assert.notNull(applicationEventPublisher, "ApplicationEventPublisher cannot be null");
 		this.eventPublisher = applicationEventPublisher;
+	}
+
+	/**
+	 * Clear all sessions.
+	 */
+	public void clearAllSessions() {
+		this.sessionCache.truncate();
+	}
+
+	/**
+	 * Reset the max inactive interval for all active sessions.
+	 */
+	public void resetMaxInactiveIntervalForActiveSessions() {
+		final long expirationInMillis = this.defaultMaxInactiveInterval.toMillis();
+		this.sessionCache.invokeAll((entry) -> {
+
+			final MapSession mapSession = entry.getValue();
+
+			if (entry.getValue().isExpired()) {
+				return null;
+			}
+
+			mapSession.setMaxInactiveInterval(Duration.ofMillis(expirationInMillis));
+			final BinaryEntry binaryEntry = MemcachedHelper.getBinaryEntry(entry);
+			binaryEntry.expire(expirationInMillis);
+
+			entry.setValue(mapSession);
+			return null;
+		});
 	}
 }

@@ -1,18 +1,21 @@
 /*
- * Copyright (c) 2013, 2021, Oracle and/or its affiliates.
+ * Copyright (c) 2013, 2022, Oracle and/or its affiliates.
  *
  * Licensed under the Universal Permissive License v 1.0 as shown at
  * https://oss.oracle.com/licenses/upl.
  */
 package com.oracle.coherence.spring.cache;
 
-import java.util.Collections;
+import java.time.Duration;
 import java.util.concurrent.Callable;
+import java.util.function.Supplier;
 
 import com.tangosol.net.NamedCache;
+import com.tangosol.util.ConcurrentMap;
 
 import org.springframework.cache.Cache;
 import org.springframework.cache.support.SimpleValueWrapper;
+import org.springframework.util.Assert;
 
 /**
  * Coherence-specific implementation of {@link Cache} that defines common cache operations.
@@ -23,10 +26,22 @@ import org.springframework.cache.support.SimpleValueWrapper;
 public class CoherenceCache implements Cache {
 
 	private final NamedCache<Object, Object> cache;
+	private final CoherenceCacheConfiguration cacheConfiguration;
 
-	public CoherenceCache(NamedCache<Object, Object> cache) {
+	/**
+	 * Construct the CoherenceCache.
+	 * @param cache must not be null
+	 * @param cacheConfiguration must not be null
+	 */
+	public CoherenceCache(NamedCache<Object, Object> cache, CoherenceCacheConfiguration cacheConfiguration) {
 		super();
+
+		Assert.notNull(cache, "The NamedCache must not be null.");
+		Assert.notNull(cache, "cacheConfiguration must not be null.");
+
 		this.cache = cache;
+		this.cacheConfiguration = cacheConfiguration;
+
 	}
 
 	@Override
@@ -56,26 +71,78 @@ public class CoherenceCache implements Cache {
 		return (T) value;
 	}
 
-	@SuppressWarnings("unchecked")
+	/**
+	 * Return the value to which this cache maps the specified key. If the key does not exist in the cache, the method
+	 * will obtain that value using the provided valueLoader. In that case, the key will be locked, unless
+	 * {@link CoherenceCacheConfiguration#isUseLocks()} returns false.
+	 * @param key might be null. See {@link NamedCache#get(Object)}.
+	 * @param valueLoader must not be null.
+	 * @param <T> type of the return value.
+	 * @return the value from the cache.
+	 */
 	@Override
 	public <T> T get(Object key, Callable<T> valueLoader) {
+		Assert.notNull(valueLoader, "valueLoader must not be null.");
 		final Object value = this.cache.get(key);
 		if (value != null) {
 			return (T) value;
 		}
 		else {
-			this.cache.lock(key);
 			try {
-				final Object value2 = this.cache.get(key);
-				if (value2 != null) {
-					return (T) value2;
+				return this.lockIfNecessary(key, () -> {
+					final Object value2 = this.cache.get(key);
+					if (value2 != null) {
+						return (T) value2;
+					}
+					else {
+						return loadValue(key, valueLoader);
+					}
+				});
+			}
+			catch (Exception ex) {
+				if (ex instanceof ValueRetrievalException) {
+					throw ex;
 				}
 				else {
-					return loadValue(key, valueLoader);
+					throw new ValueRetrievalException(key, valueLoader, ex);
 				}
+			}
+		}
+	}
+
+	private <T> T lockIfNecessary(Object key, Supplier<T> runnable) {
+		if (!this.cacheConfiguration.isUseLocks()) {
+			return runnable.get();
+		}
+
+		final Object lockKey;
+
+		if (this.cacheConfiguration.isLockEntireCache()) {
+			lockKey = ConcurrentMap.LOCK_ALL;
+		}
+		else {
+			lockKey = key;
+		}
+
+		if (this.cache.lock(lockKey, this.cacheConfiguration.getLockTimeout())) {
+			try {
+				return runnable.get();
 			}
 			finally {
 				this.cache.unlock(key);
+			}
+		}
+		else {
+			if (this.cacheConfiguration.isLockEntireCache()) {
+				throw new IllegalStateException(
+						String.format("Unable to lock entire cache within the specified timeout of %sms.",
+								this.cacheConfiguration.getLockTimeout()));
+			}
+			else {
+				throw new IllegalStateException(
+						String.format("Unable to lock key '%s' within the specified timeout of %sms.",
+								key,
+								this.cacheConfiguration.getLockTimeout()));
 			}
 		}
 	}
@@ -96,7 +163,7 @@ public class CoherenceCache implements Cache {
 			value = valueLoader.call();
 		}
 		catch (Exception ex) {
-			throw new IllegalStateException("Executing the callable failed.", ex);
+			throw new ValueRetrievalException(key, valueLoader, ex);
 		}
 		put(key, value);
 		return value;
@@ -107,7 +174,12 @@ public class CoherenceCache implements Cache {
 		if (value == null) {
 			return;
 		}
-		this.cache.putAll(Collections.singletonMap(key, value));
+		if (isUsingTtl(this.cacheConfiguration.getTimeToLive())) {
+			this.cache.put(key, value, this.cacheConfiguration.getTimeToLive().toMillis());
+		}
+		else {
+			this.cache.put(key, value);
+		}
 	}
 
 	/**
@@ -116,5 +188,17 @@ public class CoherenceCache implements Cache {
 	 */
 	public int size() {
 		return this.cache.size();
+	}
+
+	/**
+	 * Return the used {@link CoherenceCacheConfiguration}.
+	 * @return never returns {@code null}.
+	 */
+	public CoherenceCacheConfiguration getCacheConfiguration() {
+		return this.cacheConfiguration;
+	}
+
+	private static boolean isUsingTtl(Duration timeTolive) {
+		return timeTolive != null && !timeTolive.isZero() && !timeTolive.isNegative();
 	}
 }

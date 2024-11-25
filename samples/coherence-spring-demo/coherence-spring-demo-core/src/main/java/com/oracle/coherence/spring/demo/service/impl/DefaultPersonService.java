@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2020, Oracle and/or its affiliates.
+ * Copyright (c) 2020, 2022, Oracle and/or its affiliates.
  *
  * Licensed under the Universal Permissive License v 1.0 as shown at
- * http://oss.oracle.com/licenses/upl.
+ * https://oss.oracle.com/licenses/upl.
  */
 package com.oracle.coherence.spring.demo.service.impl;
 
@@ -16,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.oracle.coherence.spring.demo.dao.PersonRepository;
 import com.oracle.coherence.spring.demo.model.Person;
 import com.oracle.coherence.spring.demo.service.PersonService;
+import org.springframework.util.Assert;
 
 @Transactional
 @Service
@@ -31,6 +32,9 @@ public class DefaultPersonService implements PersonService {
 
 	@Override
 	public Long createAndStorePerson(String firstName, String lastName, int age) {
+		Assert.hasText(firstName, "firstName must not be empty.");
+		Assert.hasText(lastName, "lastName must not be empty.");
+		Assert.isTrue(age >= 0, "age must be positive.");
 		final Person person = new Person();
 		person.setFirstname(firstName);
 		person.setLastname(lastName);

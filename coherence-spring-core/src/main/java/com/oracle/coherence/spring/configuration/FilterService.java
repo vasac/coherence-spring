@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013, 2021, Oracle and/or its affiliates.
+ * Copyright (c) 2013, 2024, Oracle and/or its affiliates.
  *
  * Licensed under the Universal Permissive License v 1.0 as shown at
  * https://oss.oracle.com/licenses/upl.
@@ -8,19 +8,23 @@ package com.oracle.coherence.spring.configuration;
 
 import java.lang.annotation.Annotation;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
+import java.util.stream.Collectors;
 
 import com.oracle.coherence.spring.annotation.FilterBinding;
 import com.oracle.coherence.spring.annotation.FilterFactory;
 import com.oracle.coherence.spring.configuration.support.CoherenceAnnotationUtils;
+import com.oracle.coherence.spring.configuration.support.CommonFilterFactories;
 import com.tangosol.util.Filter;
 import com.tangosol.util.Filters;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 
 import org.springframework.beans.factory.InjectionPoint;
 import org.springframework.context.ConfigurableApplicationContext;
-import org.springframework.util.StringUtils;
+import org.springframework.util.Assert;
 
 /**
  * Spring Configuration for defining {@link Filter} beans.
@@ -30,34 +34,50 @@ import org.springframework.util.StringUtils;
  */
 public class FilterService {
 
-	final ConfigurableApplicationContext applicationContext;
+	private static final Log logger = LogFactory.getLog(FilterService.class);
+
+	private final ConfigurableApplicationContext applicationContext;
+
+	private final Map<String, FilterFactory> filterFactories;
 
 	public FilterService(ConfigurableApplicationContext applicationContext) {
 		this.applicationContext = applicationContext;
+		this.filterFactories = CommonFilterFactories.getFilterFactories();
+	}
+
+	private Filter getFilterFromApplicationContext(Annotation coherenceAnnotation) {
+		Assert.notNull(coherenceAnnotation, "coherenceAnnotation must not be null.");
+
+		final Class filterFactoryClass = FilterFactory.class;
+		final String[] beanNames = this.applicationContext.getBeanNamesForType(filterFactoryClass);
+
+		if (logger.isDebugEnabled()) {
+			logger.debug(String.format("Found %s beans in the application context for bean type %s", beanNames.length, filterFactoryClass.getName()));
+		}
+
+		final Collection<FilterFactory> beans = CoherenceAnnotationUtils.getBeansOfTypeWithAnnotation(
+				this.applicationContext,
+				filterFactoryClass,
+				coherenceAnnotation.annotationType());
+
+		final List<Filter> foundFilters = beans.stream()
+				.map((filterFactory) -> filterFactory.create(coherenceAnnotation))
+				.collect(Collectors.toList());
+
+		if (!foundFilters.isEmpty() && foundFilters.size() == 1) {
+			return foundFilters.iterator().next();
+		}
+		else if (foundFilters.size() > 1) {
+			throw new IllegalStateException(String.format("Needed 1 but found %s beans annotated with '%s'",
+					foundFilters.size(), coherenceAnnotation.annotationType().getName()));
+		}
+		return null;
 	}
 
 	public Filter<?> getFilter(InjectionPoint injectionPoint) {
-		final Annotation annotation = CoherenceAnnotationUtils.getSingleAnnotationMarkedWithMarkerAnnotation(injectionPoint, FilterBinding.class);
-
-		if (annotation != null) {
-			final Class<? extends Annotation> annotationType = annotation.annotationType();
-			final Map<String, Object> beans = this.applicationContext.getBeansWithAnnotation(annotationType);
-
-			if (beans.isEmpty()) {
-				throw new IllegalStateException(String.format("No bean annotated with '%s' found.", annotationType.getCanonicalName()));
-			}
-			else if (beans.size() > 1) {
-				throw new IllegalStateException(String.format("Needed 1 but found %s beans annotated with '%s': %s",
-						beans.size(), annotationType.getCanonicalName(), StringUtils.collectionToCommaDelimitedString(beans.keySet())));
-			}
-
-			@SuppressWarnings({"unchecked", "rawtypes"})
-			final FilterFactory<Annotation, Object> filterFactory = (FilterFactory) beans.values().iterator().next();
-			return filterFactory.create(annotation);
-		}
-		else {
-			return Filters.always();
-		}
+		Assert.notNull(injectionPoint, "injectionPoint must not be null.");
+		final List<Annotation> annotations = CoherenceAnnotationUtils.getAnnotationsMarkedWithMarkerAnnotation(injectionPoint, FilterBinding.class);
+		return this.resolve(annotations);
 	}
 
 	/**
@@ -67,18 +87,22 @@ public class FilterService {
 	 * @return a {@link Filter} implementation created from the specified qualifiers.
 	 */
 	@SuppressWarnings({"unchecked", "rawtypes"})
-	public <T> Filter<T> resolve(Set<Annotation> annotations) {
+	public <T> Filter<T> resolve(Collection<Annotation> annotations) {
 		final List<Filter<?>> list = new ArrayList<>();
 
 		for (Annotation annotation : annotations) {
-			final Class<? extends Annotation> annotationType = annotation.annotationType();
-			if (annotationType.isAnnotationPresent(FilterBinding.class)) {
-				final FilterFactory factory = CoherenceAnnotationUtils.getSingleBeanWithAnnotation(this.applicationContext, annotationType);
-				final Filter filter = factory.create(annotation);
-				if (filter != null) {
-					list.add(filter);
-				}
+			Filter filter = this.getFilterFromApplicationContext(annotation);
+			if (filter != null) {
+				list.add(filter);
+				continue;
 			}
+
+			final Class<? extends Annotation> annotationType = annotation.annotationType();
+			final FilterFactory<Annotation, ?> filterFactory = this.filterFactories.get(annotationType.getName());
+			if (filterFactory == null) {
+				throw new IllegalStateException(String.format("No filterFactory found for annotation %s.", annotationType.getCanonicalName()));
+			}
+			list.add(filterFactory.create(annotation));
 		}
 
 		Filter[] aFilters = list.toArray(new Filter[0]);
