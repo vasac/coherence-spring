@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021, Oracle and/or its affiliates.
+ * Copyright (c) 2021, 2025, Oracle and/or its affiliates.
  *
  * Licensed under the Universal Permissive License v 1.0 as shown at
  * https://oss.oracle.com/licenses/upl.
@@ -8,6 +8,7 @@ package com.oracle.coherence.spring.event.liveevent.handler;
 
 import java.lang.annotation.Annotation;
 import java.util.EnumSet;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 
 import com.oracle.coherence.spring.annotation.event.ScopeName;
@@ -79,7 +80,7 @@ public abstract class EventHandler<E extends Event<T>, T extends Enum<T>>
 			String eventScope = getEventScope(event);
 
 			if (observerScope == null || eventScope == null || observerScope.equals(eventScope)) {
-				if (this.observer.isAsync()) {
+				if (this.observer.isAsync() && isPreEvent(event)) {
 					CompletableFuture.supplyAsync(() -> {
 						this.observer.notify(event);
 						return event;
@@ -90,6 +91,12 @@ public abstract class EventHandler<E extends Event<T>, T extends Enum<T>>
 				}
 			}
 		}
+	}
+
+	abstract Set getPreEventTypes();
+
+	boolean isPreEvent(E event) {
+		return getPreEventTypes().contains(event.getType());
 	}
 
 	/**

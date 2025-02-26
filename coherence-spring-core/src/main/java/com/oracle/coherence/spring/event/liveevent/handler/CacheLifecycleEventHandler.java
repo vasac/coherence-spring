@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021, Oracle and/or its affiliates.
+ * Copyright (c) 2021, 2025, Oracle and/or its affiliates.
  *
  * Licensed under the Universal Permissive License v 1.0 as shown at
  * https://oss.oracle.com/licenses/upl.
@@ -7,6 +7,8 @@
 package com.oracle.coherence.spring.event.liveevent.handler;
 
 import java.lang.annotation.Annotation;
+import java.util.Collections;
+import java.util.Set;
 
 import com.oracle.coherence.spring.annotation.event.Created;
 import com.oracle.coherence.spring.annotation.event.Destroyed;
@@ -37,5 +39,10 @@ public class CacheLifecycleEventHandler
 				addType(CacheLifecycleEvent.Type.TRUNCATED);
 			}
 		}
+	}
+
+	@Override
+	Set getPreEventTypes() {
+		return Collections.emptySet();
 	}
 }
