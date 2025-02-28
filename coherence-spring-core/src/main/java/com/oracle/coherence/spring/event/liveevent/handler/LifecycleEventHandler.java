@@ -25,7 +25,7 @@ import com.tangosol.net.events.internal.ConfigurableCacheFactoryDispatcher;
  */
 public class LifecycleEventHandler extends EventHandler<LifecycleEvent, LifecycleEvent.Type> {
 
-	private final Set<LifecycleEvent.Type> preEventTypes = Set.of(
+	private static final Set<LifecycleEvent.Type> PRE_EVENT_TYPES = Set.of(
 			LifecycleEvent.Type.ACTIVATING,
 			LifecycleEvent.Type.DISPOSING);
 
@@ -56,7 +56,7 @@ public class LifecycleEventHandler extends EventHandler<LifecycleEvent, Lifecycl
 	}
 
 	@Override
-	Set getPreEventTypes() {
-		return preEventTypes;
+	boolean isPreEvent(LifecycleEvent event) {
+		return PRE_EVENT_TYPES.contains(event.getType());
 	}
 }

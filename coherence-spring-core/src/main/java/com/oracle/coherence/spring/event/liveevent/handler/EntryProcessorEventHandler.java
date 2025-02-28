@@ -25,7 +25,7 @@ public class EntryProcessorEventHandler
 		extends CacheEventHandler<EntryProcessorEvent, EntryProcessorEvent.Type> {
 	private final Class<?> m_classProcessor;
 
-	private final Set<EntryProcessorEvent.Type> preEventTypes = Set.of(EntryProcessorEvent.Type.EXECUTING);
+	private static final Set<EntryProcessorEvent.Type> PRE_EVENT_TYPES = Set.of(EntryProcessorEvent.Type.EXECUTING);
 
 	public EntryProcessorEventHandler(MethodEventObserver<EntryProcessorEvent> observer) {
 		super(observer, EntryProcessorEvent.Type.class);
@@ -53,7 +53,7 @@ public class EntryProcessorEventHandler
 	}
 
 	@Override
-	Set getPreEventTypes() {
-		return preEventTypes;
+	boolean isPreEvent(EntryProcessorEvent event) {
+		return PRE_EVENT_TYPES.contains(event.getType());
 	}
 }

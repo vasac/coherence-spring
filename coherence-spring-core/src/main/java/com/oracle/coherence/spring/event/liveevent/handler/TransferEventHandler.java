@@ -28,7 +28,7 @@ import com.tangosol.net.events.partition.TransferEvent;
  */
 public class TransferEventHandler extends ServiceEventHandler<TransferEvent, TransferEvent.Type> {
 
-	private final Set<TransferEvent.Type> preEventTypes = Set.of(
+	private static final Set<TransferEvent.Type> PRE_EVENT_TYPES = Set.of(
 			TransferEvent.Type.DEPARTING);
 
 	public TransferEventHandler(MethodEventObserver<TransferEvent> observer) {
@@ -60,7 +60,7 @@ public class TransferEventHandler extends ServiceEventHandler<TransferEvent, Tra
 	}
 
 	@Override
-	Set getPreEventTypes() {
-		return preEventTypes;
+	boolean isPreEvent(TransferEvent event) {
+		return PRE_EVENT_TYPES.contains(event.getType());
 	}
 }

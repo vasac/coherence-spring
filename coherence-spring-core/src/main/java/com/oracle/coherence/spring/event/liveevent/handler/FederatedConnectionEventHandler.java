@@ -23,7 +23,7 @@ import com.tangosol.net.events.federation.FederatedConnectionEvent;
  */
 public class FederatedConnectionEventHandler extends FederationEventHandler<FederatedConnectionEvent, FederatedConnectionEvent.Type> {
 
-	private final Set<FederatedConnectionEvent.Type> preEventTypes = Set.of(FederatedConnectionEvent.Type.CONNECTING);
+	private static final Set<FederatedConnectionEvent.Type> PRE_EVENT_TYPES = Set.of(FederatedConnectionEvent.Type.CONNECTING);
 
 	public FederatedConnectionEventHandler(MethodEventObserver<FederatedConnectionEvent> observer) {
 		super(observer, FederatedConnectionEvent.Type.class, FederatedConnectionEvent::getParticipantName);
@@ -51,7 +51,7 @@ public class FederatedConnectionEventHandler extends FederationEventHandler<Fede
 	}
 
 	@Override
-	Set getPreEventTypes() {
-		return preEventTypes;
+	boolean isPreEvent(FederatedConnectionEvent event) {
+		return PRE_EVENT_TYPES.contains(event.getType());
 	}
 }

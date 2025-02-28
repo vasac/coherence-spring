@@ -23,7 +23,7 @@ import com.tangosol.net.events.federation.FederatedPartitionEvent;
 public class FederatedPartitionEventHandler
 		extends FederationEventHandler<FederatedPartitionEvent, FederatedPartitionEvent.Type> {
 
-	private final Set<FederatedPartitionEvent.Type> preEventTypes = Set.of(FederatedPartitionEvent.Type.SYNCING);
+	private static final Set<FederatedPartitionEvent.Type> PRE_EVENT_TYPES = Set.of(FederatedPartitionEvent.Type.SYNCING);
 
 	public FederatedPartitionEventHandler(MethodEventObserver<FederatedPartitionEvent> observer) {
 		super(observer, FederatedPartitionEvent.Type.class, FederatedPartitionEvent::getParticipant);
@@ -39,7 +39,7 @@ public class FederatedPartitionEventHandler
 	}
 
 	@Override
-	Set getPreEventTypes() {
-		return preEventTypes;
+	boolean isPreEvent(FederatedPartitionEvent event) {
+		return PRE_EVENT_TYPES.contains(event.getType());
 	}
 }

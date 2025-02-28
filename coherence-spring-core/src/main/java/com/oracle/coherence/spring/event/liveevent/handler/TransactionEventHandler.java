@@ -22,7 +22,7 @@ import com.tangosol.net.events.partition.TransactionEvent;
  */
 public class TransactionEventHandler extends ServiceEventHandler<TransactionEvent, TransactionEvent.Type> {
 
-	private final Set<TransactionEvent.Type> preEventTypes = Set.of(
+	private static final Set<TransactionEvent.Type> PRE_EVENT_TYPES = Set.of(
 			TransactionEvent.Type.COMMITTING);
 
 	public TransactionEventHandler(MethodEventObserver<TransactionEvent> observer) {
@@ -39,7 +39,7 @@ public class TransactionEventHandler extends ServiceEventHandler<TransactionEven
 	}
 
 	@Override
-	Set getPreEventTypes() {
-		return preEventTypes;
+	boolean isPreEvent(TransactionEvent event) {
+		return PRE_EVENT_TYPES.contains(event.getType());
 	}
 }

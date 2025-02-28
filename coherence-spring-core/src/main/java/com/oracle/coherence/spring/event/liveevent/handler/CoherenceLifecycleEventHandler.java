@@ -30,7 +30,7 @@ public class CoherenceLifecycleEventHandler
 
 	private String name;
 
-	private final Set<CoherenceLifecycleEvent.Type> preEventTypes = Set.of(
+	private static final Set<CoherenceLifecycleEvent.Type> PRE_EVENT_TYPES = Set.of(
 			CoherenceLifecycleEvent.Type.STARTING,
 			CoherenceLifecycleEvent.Type.STOPPING);
 
@@ -63,7 +63,7 @@ public class CoherenceLifecycleEventHandler
 	}
 
 	@Override
-	Set getPreEventTypes() {
-		return preEventTypes;
+	boolean isPreEvent(CoherenceLifecycleEvent event) {
+		return PRE_EVENT_TYPES.contains(event.getType());
 	}
 }

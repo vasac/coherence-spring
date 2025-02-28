@@ -29,7 +29,7 @@ import com.tangosol.net.events.partition.cache.EntryEvent;
  */
 public class EntryEventHandler<K, V> extends CacheEventHandler<EntryEvent<K, V>, EntryEvent.Type> {
 
-	private final Set<EntryEvent.Type> preEventTypes = Set.of(
+	private static final Set<EntryEvent.Type> PRE_EVENT_TYPES = Set.of(
 			EntryEvent.Type.INSERTING,
 			EntryEvent.Type.UPDATING,
 			EntryEvent.Type.REMOVING);
@@ -60,7 +60,7 @@ public class EntryEventHandler<K, V> extends CacheEventHandler<EntryEvent<K, V>,
 	}
 
 	@Override
-	Set<EntryEvent.Type> getPreEventTypes() {
-		return preEventTypes;
+	boolean isPreEvent(EntryEvent<K, V> event) {
+		return PRE_EVENT_TYPES.contains(event.getType());
 	}
 }

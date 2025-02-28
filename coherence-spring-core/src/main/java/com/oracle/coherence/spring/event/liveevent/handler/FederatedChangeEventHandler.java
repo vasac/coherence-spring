@@ -24,7 +24,7 @@ import com.tangosol.net.events.federation.FederatedChangeEvent;
 public class FederatedChangeEventHandler
 		extends FederationEventHandler<FederatedChangeEvent, FederatedChangeEvent.Type> {
 
-	private final Set<FederatedChangeEvent.Type> preEventTypes = Set.of(
+	private static final Set<FederatedChangeEvent.Type> PRE_EVENT_TYPES = Set.of(
 			FederatedChangeEvent.Type.COMMITTING_LOCAL,
 			FederatedChangeEvent.Type.COMMITTING_REMOTE,
 			FederatedChangeEvent.Type.REPLICATING
@@ -47,7 +47,7 @@ public class FederatedChangeEventHandler
 	}
 
 	@Override
-	Set getPreEventTypes() {
-		return preEventTypes;
+	boolean isPreEvent(FederatedChangeEvent event) {
+		return PRE_EVENT_TYPES.contains(event.getType());
 	}
 }

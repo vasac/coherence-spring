@@ -30,7 +30,7 @@ public class SessionLifecycleEventHandler extends EventHandler<SessionLifecycleE
 
 	private String name;
 
-	private final Set<SessionLifecycleEvent.Type> preEventTypes = Set.of(
+	private static final Set<SessionLifecycleEvent.Type> PRE_EVENT_TYPES = Set.of(
 			SessionLifecycleEvent.Type.STARTING,
 			SessionLifecycleEvent.Type.STOPPING);
 
@@ -66,7 +66,7 @@ public class SessionLifecycleEventHandler extends EventHandler<SessionLifecycleE
 	}
 
 	@Override
-	Set getPreEventTypes() {
-		return preEventTypes;
+	boolean isPreEvent(SessionLifecycleEvent event) {
+		return PRE_EVENT_TYPES.contains(event.getType());
 	}
 }

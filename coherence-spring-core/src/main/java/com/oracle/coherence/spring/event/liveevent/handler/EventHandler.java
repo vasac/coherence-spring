@@ -8,7 +8,6 @@ package com.oracle.coherence.spring.event.liveevent.handler;
 
 import java.lang.annotation.Annotation;
 import java.util.EnumSet;
-import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 
 import com.oracle.coherence.spring.annotation.event.ScopeName;
@@ -80,7 +79,7 @@ public abstract class EventHandler<E extends Event<T>, T extends Enum<T>>
 			String eventScope = getEventScope(event);
 
 			if (observerScope == null || eventScope == null || observerScope.equals(eventScope)) {
-				if (this.observer.isAsync() && isPreEvent(event)) {
+				if (this.observer.isAsync() && !isPreEvent(event)) {
 					CompletableFuture.supplyAsync(() -> {
 						this.observer.notify(event);
 						return event;
@@ -93,10 +92,15 @@ public abstract class EventHandler<E extends Event<T>, T extends Enum<T>>
 		}
 	}
 
-	abstract Set getPreEventTypes();
-
+	/**
+	 * Return {@code true} if passed event is pre-event (pre-events
+	 * are emitted synchronously before the entry is mutated).
+	 * @param event the Event to be checked
+	 * @return {@code true} if passed event is pre-event;
+	 * {@code false} otherwise
+	 */
 	boolean isPreEvent(E event) {
-		return getPreEventTypes().contains(event.getType());
+		return false;
 	}
 
 	/**

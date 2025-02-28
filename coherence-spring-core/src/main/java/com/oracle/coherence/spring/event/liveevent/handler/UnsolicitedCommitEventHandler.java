@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021, 2025, Oracle and/or its affiliates.
+ * Copyright (c) 2021, Oracle and/or its affiliates.
  *
  * Licensed under the Universal Permissive License v 1.0 as shown at
  * https://oss.oracle.com/licenses/upl.
@@ -7,8 +7,6 @@
 package com.oracle.coherence.spring.event.liveevent.handler;
 
 import java.lang.annotation.Annotation;
-import java.util.Collections;
-import java.util.Set;
 
 import com.oracle.coherence.spring.annotation.event.Committed;
 import com.oracle.coherence.spring.event.liveevent.MethodEventObserver;
@@ -29,10 +27,5 @@ public class UnsolicitedCommitEventHandler extends ServiceEventHandler<Unsolicit
 				addType(UnsolicitedCommitEvent.Type.COMMITTED);
 			}
 		}
-	}
-
-	@Override
-	Set getPreEventTypes() {
-		return Collections.emptySet();
 	}
 }
