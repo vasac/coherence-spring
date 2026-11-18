@@ -1,0 +1,76 @@
+# Copyright (c) 2026, Oracle and/or its affiliates.
+# Licensed under the Universal Permissive License v 1.0 as shown at
+# https://oss.oracle.com/licenses/upl.
+
+name: Diagnose publisher consumer ports
+
+'on':
+  push:
+    branches:
+      - zx/repro-publisher-port-20261118
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publisher-port-repro-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  reproduce:
+    if: github.repository == 'vasac/coherence-spring'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        trial: [1, 2, 3, 4, 5]
+    env:
+      SOURCE_SHA: 67c2b6b0f6a69d440ac70878417dcf2a557b71eb
+      HEAD_BRANCH: main
+      TRIAL: ${{ matrix.trial }}
+      MAVEN_GITHUB_TOKEN: ''
+      MAVEN_SONATYPE_USERNAME: ''
+      MAVEN_SONATYPE_TOKEN: ''
+      NVD_API_KEY: ''
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Set up original publisher JDK
+        uses: actions/setup-java@v5.0.0
+        with:
+          distribution: adopt
+          java-version: '17.0.21'
+      - name: Restore publisher-style Maven cache in this fork
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-m2-
+      - name: Load frozen observers outside the build checkout
+        shell: bash
+        run: |
+          tools="$RUNNER_TEMP/publisher-port-repro-tools"
+          mkdir -p "$tools"
+          git cat-file -e "${GITHUB_SHA}^{commit}"
+          git show "${GITHUB_SHA}:.github/scripts/reproduce-publisher-build.sh" > "$tools/reproduce-publisher-build.sh"
+          git show "${GITHUB_SHA}:.github/scripts/observe-consumer-ports.py" > "$tools/observe-consumer-ports.py"
+      - name: Run unchanged publisher build with observations
+        shell: bash
+        run: bash "$RUNNER_TEMP/publisher-port-repro-tools/reproduce-publisher-build.sh"
+      - name: Clean Maven cache as in the publisher
+        shell: bash
+        run: find ~/.m2/repository -type d -name '*SNAPSHOT' | xargs rm -fr
+      - name: Retain diagnostic logs and test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: publisher-port-trial-${{ matrix.trial }}
+          path: ${{ runner.temp }}/publisher-port-repro/
+          if-no-files-found: error
+          retention-days: 7
